@@ -1,0 +1,13 @@
+class Main {
+  x : entero;
+  y : Bool;
+  1z : String;
+
+  main() : Int {
+    y <- y;
+  };
+};
+
+clase hola {
+ x : Bool;
+};

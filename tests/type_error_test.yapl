@@ -1,0 +1,35 @@
+class Main {
+  x : Int;
+  y : Bool;
+  z : String;
+  main() : Int {
+    {
+      x <- false;
+      y <- "Hola";
+      z <- 5;
+
+      -- Operaciones matematicas
+      x <- y + 3;
+      x <- true * 3;
+      x <- 5 / z;
+      x <- 8 - "string";
+
+      y <- 8 - 7;
+      
+      -- Operaciones booleanas
+      y <- x < true;
+      y <- 8 <= y;
+      y <- "Hola" = 4;
+
+      z <- 8 < 6;
+
+      -- Not y ~
+      y <- not "String";
+      y <- not 7;
+      x <- ~"Hola";
+
+      z <- ~false;
+      x <- not true;
+    }
+  };
+};
