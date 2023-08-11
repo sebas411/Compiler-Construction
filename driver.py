@@ -233,11 +233,12 @@ def main(argv):
         # Generar representación gráfica
         dot = Digraph(comment='Abstract Syntax Tree')
         visualize_tree(tree, dot)
-        dot.render('tree', format='png', view=True)
+        #dot.render('tree', format='png', view=True)
 
         # Generar representación textual
         textual_representation = Trees.toStringTree(tree, None, parser)
-        print(textual_representation)
+        #print(textual_representation)
+        print("Code compiled successfully")
     else:
         print("Se encontraron errores durante el análisis. No se generará ningún árbol.")
 
