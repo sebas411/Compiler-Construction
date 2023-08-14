@@ -13,16 +13,23 @@ class TypeCheckingVisitor(YAPLVisitor):
         self.symbol_table = [{}]  # Una lista de diccionarios para manejar los ámbitos
         self.current_class = None
         self.classes = {}
+        self.inheritance_info = {}
 
     def visitClass_prod(self, ctx:YAPLParser.Class_prodContext):
         self.current_class = ctx.TYPE_ID(0).getText()
         self.classes[self.current_class] = {}  
         self.symbol_table.append({})  # crea un nuevo ámbito para la clase
+        
+        if ctx.INHERITS():
+            inherited_class = ctx.TYPE_ID(1).getText()
+            self.inheritance_info[self.current_class] = inherited_class
+        else:
+            self.inheritance_info[self.current_class] = None
+        
         self.visitChildren(ctx)
         self.current_class = None
         self.symbol_table.pop()  # sale del ámbito de la clase al finalizar
-        # print(f"Tabla de símbolos después de visitar la clase: {self.symbol_table}")
-        # print(f"Tabla de clases después de visitar la clase: {self.classes}")
+
 
     def visitFeature(self, ctx:YAPLParser.FeatureContext):
         if ctx.id_() and ctx.TYPE_ID():
@@ -191,8 +198,60 @@ class TypeCheckingVisitor(YAPLVisitor):
         return 'Error'
 
 
+    def verify_main_class(self):
+        # Verificar que existe una clase llamada 'Main'
+        if 'Main' not in self.classes:
+            print("Error: La clase 'Main' no está definida.")
+            return
+        
+        # Verificar que la clase 'Main' tiene un método llamado 'main'
+        main_class_methods = self.classes['Main']
+        if 'main' not in main_class_methods:
+            print("Error: La clase 'Main' no tiene un método 'main'.")
+            return
+
+        # Verificar que el tipo de retorno del método 'main' es 'Int'
+        main_method_type = main_class_methods['main']
+        if main_method_type != 'Int':
+            print(f"Error: El método 'main' en la clase 'Main' tiene un tipo de retorno incorrecto: '{main_method_type}'. Se esperaba 'Int'.")
+            return
+                
+        print("La clase 'Main' es válida.")
 
 
+    def verify_inheritance_rules(self):
+        def check_recursive_inheritance(start_class):
+            visited = set()
+            current_class = start_class
+            while current_class in self.inheritance_info:
+                if current_class in visited:
+                    print(f"Error: Herencia recursiva detectada con la clase '{current_class}'.")
+                    return True
+                visited.add(current_class)
+                current_class = self.inheritance_info[current_class]
+            return False
+
+        print(f"Reglas de herencia: {self.inheritance_info}")
+        print(f"Tabla de clases: {self.classes}")
+
+        # Verificar que la clase Main no hereda de ninguna otra clase.
+        if self.inheritance_info.get('Main'):
+            print("Error: La clase 'Main' no puede heredar de ninguna otra clase.")
+            return
+
+        # Verificar que las clases de tipos básicos no son superclases.
+        basic_types = ['Int', 'String', 'Bool']
+        for basic_type in basic_types:
+            if basic_type in self.inheritance_info.values():
+                print(f"Error: La clase '{basic_type}' no puede ser una superclase.")
+                return
+
+        # Verificar herencia recursiva.
+        for cls in self.inheritance_info:
+            if check_recursive_inheritance(cls):
+                return
+
+        print("Las reglas de herencia son válidas.")
 
 
 class MyListener(YAPLListener, ErrorListener):
@@ -228,6 +287,8 @@ def main(argv):
 
     visitor = TypeCheckingVisitor()
     visitor.visit(tree)
+    visitor.verify_main_class()
+    visitor.verify_inheritance_rules()
 
     if parser.getNumberOfSyntaxErrors() == 0:
         # Generar representación gráfica

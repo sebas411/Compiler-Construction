@@ -1,0 +1,16 @@
+class A inherits B {
+  x : Int;
+};
+
+class B inherits A {
+  y : Bool;
+};
+
+class Main {
+  z : String;
+  main() : Int {
+    {
+      z <- "Hola";
+    }
+  };
+};
