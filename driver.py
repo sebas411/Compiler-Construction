@@ -1,12 +1,12 @@
 import sys
 from antlr4 import *
 from antlr4.error.ErrorListener import ErrorListener
-from YAPLLexer import YAPLLexer
-from YAPLParser import YAPLParser
-from YAPLListener import YAPLListener
+from antlr.YAPLLexer import YAPLLexer
+from antlr.YAPLParser import YAPLParser
+from antlr.YAPLListener import YAPLListener
 from graphviz import Digraph
 from antlr4.tree.Trees import Trees
-from YAPLVisitor import YAPLVisitor
+from antlr.YAPLVisitor import YAPLVisitor
 
 class TypeCheckingVisitor(YAPLVisitor):
     def __init__(self):
@@ -130,8 +130,6 @@ class TypeCheckingVisitor(YAPLVisitor):
         elif ctx.getChild(0).getText() == '{':
             for expre in ctx.expr():
                 self.visitExpr(expre)
-        elif ctx.PLUS():  
-            return self.visitExprWithAdd(ctx)
         else:
             # Llama a la visita de los hijos directamente sin visitChildren
             result = []
@@ -189,8 +187,8 @@ class TypeCheckingVisitor(YAPLVisitor):
                 elif child.getSymbol().type == YAPLParser.OBJECT_ID:
                     return self.visitId(child)
         if expr.id_() and expr.expr():
-            object_type = self.get_expr_type(expr.expr()[0])  
-            method_name = expr.id_().getText()
+            object_type = self.get_expr_type(expr.expr()[0])
+            method_name = expr.id_()[0].getText()
             if object_type in self.classes:
                 method_type = self.classes[object_type].get(method_name)
                 if method_type:
