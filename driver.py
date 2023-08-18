@@ -7,43 +7,49 @@ from antlr.YAPLListener import YAPLListener
 from graphviz import Digraph
 from antlr4.tree.Trees import Trees
 from antlr.YAPLVisitor import YAPLVisitor
+from lib import *
 
 class TypeCheckingVisitor(YAPLVisitor):
     def __init__(self):
-        self.symbol_table = [{}]  # Una lista de diccionarios para manejar los ámbitos
         self.current_class = None
+        self.current_method = None
         self.classes = {}
         self.inheritance_info = {}
 
     def visitClass_prod(self, ctx:YAPLParser.Class_prodContext):
         self.current_class = ctx.TYPE_ID(0).getText()
-        self.classes[self.current_class] = {}  
-        self.symbol_table.append({})  # crea un nuevo ámbito para la clase
+        self.classes[self.current_class] = ClassObj(self.current_class)
+        #self.symbol_table.append(ClassObj(self.current_class))  # crea un nuevo ámbito para la clase
         
         if ctx.INHERITS():
             inherited_class = ctx.TYPE_ID(1).getText()
+            self.classes[self.current_class].inherits(self.classes[inherited_class])
             self.inheritance_info[self.current_class] = inherited_class
         else:
             self.inheritance_info[self.current_class] = None
         
         self.visitChildren(ctx)
         self.current_class = None
-        self.symbol_table.pop()  # sale del ámbito de la clase al finalizar
 
 
     def visitFeature(self, ctx:YAPLParser.FeatureContext):
-        if ctx.id_() and ctx.TYPE_ID():
-            id_name = ctx.id_().getText()
-            id_type = ctx.TYPE_ID().getText()
-            if ctx.formal():
-                formal_types = [formal.TYPE_ID().getText() for formal in ctx.formal()]
-                id_type = (id_type, *formal_types)
-            self.symbol_table[-1][id_name] = id_type
-            self.visitChildren(ctx)
-            if self.current_class:
-                self.classes[self.current_class][id_name] = id_type
-            # print(f"Tabla de símbolos después de visitar la característica: {self.symbol_table}")
-            # print(f"Tabla de clases después de visitar la característica: {self.classes}")
+        
+        if ctx.getChild(1).getText() == "(": # method
+            method_name = ctx.id_().getText()
+            method_type = ctx.TYPE_ID().getText()
+            self.current_method = method_name
+            params = {}
+            for param in ctx.formal():
+                param_type = param.TYPE_ID()
+                param_name = param.id_()
+                params[param_name] = param_type
+            self.classes[self.current_class].methods[method_name] = Method(method_type, params)
+        else: # attribute
+            attribute_name = ctx.id_().getText()
+            attribute_type = ctx.TYPE_ID().getText()
+            self.classes[self.current_class].attributes[attribute_name] = attribute_type
+        self.visitChildren(ctx)
+        # print(f"Tabla de clases después de visitar la característica: {self.classes}")
 
 
     def visitChildren(self, node):
@@ -73,13 +79,18 @@ class TypeCheckingVisitor(YAPLVisitor):
     #             if expected_arg_type != actual_arg_type:
     #                 print(f"Error de tipo: se esperaba '{expected_arg_type}' pero se obtuvo '{actual_arg_type}' para el argumento de la función '{function_name}' en la clase '{function_type}'")
 
-    def visitExprWithId(self, ctx):
-        id_name = ctx.id_()[0].getText()  
-        id_type = self.symbol_table[-1].get(id_name)
+    def visitAssign(self, ctx):
+        id_name = ctx.id_()[0].getText()
+        if not self.classes[self.current_class].has_attribute(self.current_method, id_name):
+            print(f'El símbolo {id_name} no ha sido definido (línea {ctx.start.line})')
+            return 'Error'
+        id_type = self.classes[self.current_class].get_attribute_type(self.current_method, id_name)
         expr_type = self.get_expr_type(ctx.expr(0))
 
         if id_type != expr_type:
             print(f"Error de tipo se esperaba '{id_type}' pero se obtuvo '{expr_type}' (linea {ctx.start.line})")
+            return "Error"
+        return id_type
 
     def visitExprWithTwoChildren(self, ctx):
         left_type = self.visit(ctx.expr(0))  # visita el hijo izquierdo
@@ -107,7 +118,7 @@ class TypeCheckingVisitor(YAPLVisitor):
 
     def visitExprInFunction(self, ctx):
         function_name = ctx.id_().getText()
-        function_type = self.symbol_table[-1].get(function_name)
+        function_type = self.classes[self.current_class].methods[function_name].return_type
         if function_type is None:
             print(f"Error: función '{function_name}' no definida")
             return
@@ -122,7 +133,7 @@ class TypeCheckingVisitor(YAPLVisitor):
 
     def visitExpr(self, ctx):
         if ctx.id_() and ctx.expr():
-           self.visitExprWithId(ctx)
+           self.visitAssign(ctx)
         elif ctx.expr() and len(ctx.expr()) == 2:
             self.visitExprWithTwoChildren(ctx)
         elif ctx.NOT():
@@ -171,8 +182,8 @@ class TypeCheckingVisitor(YAPLVisitor):
             else:
                 print(f'Error de tipo de operando para "not": "{expr_type}" (línea {expr.start.line})')
         elif expr.getChildCount() == 1 and isinstance(expr.getChild(0), YAPLParser.IdContext):
-            if expr.getText() in self.symbol_table[-1]:
-                return self.symbol_table[-1].get(expr.getText())
+            if self.classes[self.current_class].has_attribute(self.current_method, expr.getText()):
+                return self.classes[self.current_class].get_attribute_type(self.current_method, expr.getText())
             else:
                 print(f'El símbolo {expr.getText()} no ha sido definido (línea {expr.start.line})')
                 return 'Error'
@@ -203,13 +214,13 @@ class TypeCheckingVisitor(YAPLVisitor):
             return
         
         # Verificar que la clase 'Main' tiene un método llamado 'main'
-        main_class_methods = self.classes['Main']
+        main_class_methods = self.classes['Main'].methods
         if 'main' not in main_class_methods:
             print("Error: La clase 'Main' no tiene un método 'main'.")
             return
 
         # Verificar que el tipo de retorno del método 'main' es 'Int'
-        main_method_type = main_class_methods['main']
+        main_method_type = main_class_methods['main'].return_type
         if main_method_type != 'Int':
             print(f"Error: El método 'main' en la clase 'Main' tiene un tipo de retorno incorrecto: '{main_method_type}'. Se esperaba 'Int'.")
             return
@@ -229,8 +240,8 @@ class TypeCheckingVisitor(YAPLVisitor):
                 current_class = self.inheritance_info[current_class]
             return False
 
-        print(f"Reglas de herencia: {self.inheritance_info}")
-        print(f"Tabla de clases: {self.classes}")
+        #print(f"Reglas de herencia: {self.inheritance_info}")
+        #print(f"Tabla de clases: {self.classes}")
 
         # Verificar que la clase Main no hereda de ninguna otra clase.
         if self.inheritance_info.get('Main'):
