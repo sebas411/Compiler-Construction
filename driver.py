@@ -274,6 +274,40 @@ class TypeCheckingVisitor(YAPLVisitor):
 
         print("Las reglas de herencia son válidas.")
 
+    def check_default_values(self, variable_name, variable_type):
+        default_values = {
+            'Int': 0,
+            'String': "",
+            'Bool': 'false'
+        }
+
+        # Si la variable no ha sido inicializada, asignarle su valor por defecto
+        if variable_name not in self.symbol_table[-1]:
+            default_value = default_values.get(variable_type)
+            if default_value is not None:
+                self.symbol_table[-1][variable_name] = default_value
+                print(f"'{variable_name}' ha sido inicializada con valor por defecto: {default_value}")
+            else:
+                print(f"Tipo desconocido '{variable_type}' para la variable '{variable_name}'. No se pudo inicializar con un valor por defecto.")
+
+
+    def check_casting(self, expr_type, expected_type, ctx):
+        if expr_type == expected_type:
+            return True
+
+        if expr_type == 'Int' and expected_type == 'Bool':
+            # Int a Bool: 0 es False, cualquier valor positivo es True.
+            return True
+        
+        if expr_type == 'Bool' and expected_type == 'Int':
+            # Bool a Int: False es 0, True es 1.
+            return True
+
+        # Si llegamos aquí, no se permite la conversión
+        print(f"Error de casteo, No se puede convertir '{expr_type}' a '{expected_type}'.")
+        return False
+
+
 
 class MyListener(YAPLListener, ErrorListener):
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
