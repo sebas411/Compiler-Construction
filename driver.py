@@ -20,35 +20,45 @@ class TypeCheckingVisitor(YAPLVisitor):
         self.current_class = ctx.TYPE_ID(0).getText()
         self.classes[self.current_class] = ClassObj(self.current_class)
         #self.symbol_table.append(ClassObj(self.current_class))  # crea un nuevo ámbito para la clase
-        
+
         if ctx.INHERITS():
             inherited_class = ctx.TYPE_ID(1).getText()
-            self.classes[self.current_class].inherits(self.classes[inherited_class])
-            self.inheritance_info[self.current_class] = inherited_class
+            if inherited_class in self.classes:
+                self.classes[self.current_class].inherit(self.classes[inherited_class])
+                self.inheritance_info[self.current_class] = inherited_class
+            else:
+                print(f"La clase {inherited_class} no ha sido definida (línea {ctx.start.line})")
+                self.inheritance_info[self.current_class] = None
+
         else:
             self.inheritance_info[self.current_class] = None
-        
+
         self.visitChildren(ctx)
         self.current_class = None
 
 
     def visitFeature(self, ctx:YAPLParser.FeatureContext):
-        
+
         if ctx.getChild(1).getText() == "(": # method
             method_name = ctx.id_().getText()
             method_type = ctx.TYPE_ID().getText()
             self.current_method = method_name
             params = {}
             for param in ctx.formal():
-                param_type = param.TYPE_ID()
-                param_name = param.id_()
+                param_type = param.TYPE_ID().getText()
+                param_name = param.id_().getText()
                 params[param_name] = param_type
             self.classes[self.current_class].methods[method_name] = Method(method_type, params)
+            return_type = self.get_expr_type(ctx.expr())
+            print(return_type)
+
         else: # attribute
             attribute_name = ctx.id_().getText()
             attribute_type = ctx.TYPE_ID().getText()
             self.classes[self.current_class].attributes[attribute_name] = attribute_type
-        self.visitChildren(ctx)
+            if ctx.expr():
+                self.get_expr_type(ctx.expr())
+        #self.visitChildren(ctx)
         # print(f"Tabla de clases después de visitar la característica: {self.classes}")
 
 
@@ -64,20 +74,75 @@ class TypeCheckingVisitor(YAPLVisitor):
                 if childResult is not None:
                     result.append(childResult)
         return result
-        
-    # def visitExprWithDot(self, ctx):
-    #     function_name = ctx.id_().getText()
-    #     function_type = self.get_expr_type(ctx.expr(0))
-    #     expected_function_type = self.classes.get(function_type, {}).get(function_name)
-    #     if expected_function_type is None:
-    #         print(f"Error de tipo: función '{function_name}' no definida en la clase '{function_type}'")
-    #     elif len(ctx.expr()) - 1 != len(ctx.expr_list().expr()):
-    #         print(f"Error de tipo: número incorrecto de argumentos para la función '{function_name}' en la clase '{function_type}'")
-    #     else:
-    #         for expected_arg_type, actual_arg_expr in zip(expected_function_type[1:], ctx.expr_list().expr()):
-    #             actual_arg_type = self.get_expr_type(actual_arg_expr)
-    #             if expected_arg_type != actual_arg_type:
-    #                 print(f"Error de tipo: se esperaba '{expected_arg_type}' pero se obtuvo '{actual_arg_type}' para el argumento de la función '{function_name}' en la clase '{function_type}'")
+
+    def get_expr_type(self, expr: YAPLParser.ExprContext):
+        if expr.getChild(0).getText() == "{": #code block
+            code_block_type = None
+            for child in expr.expr():
+                code_block_type = self.get_expr_type(child)
+            return code_block_type
+        elif expr.getChildCount() == 3 and expr.getChild(1).getText() == "<-": # assign
+            return self.visitAssign(expr)
+        elif expr.getChildCount() == 3 and expr.getChild(0).getText() == "(":
+            return self.get_expr_type(expr.getChild(1))
+        elif expr.getChildCount() == 3 and expr.getChild(1).getText() in ['+', '-', '*', '/']: # arith operations
+            left_type = self.get_expr_type(expr.getChild(0))
+            right_type = self.get_expr_type(expr.getChild(2))
+            if left_type == 'Int' and right_type == 'Int':
+                return 'Int'
+            print(f'Error de tipos de operandos para {expr.getChild(1).getText()}: "{left_type}" y "{right_type}" (línea {expr.start.line})')
+            return "Error"
+        elif expr.getChildCount() == 3 and expr.getChild(1).getText() in ['<', '<=', '=']: # comparisons
+            left_type = self.get_expr_type(expr.getChild(0))
+            right_type = self.get_expr_type(expr.getChild(2))
+            if (left_type == 'Int' and right_type == 'Int') or \
+               (left_type == 'Bool' and right_type == 'Bool') or \
+               (left_type == 'String' and right_type == 'String'):
+                return 'Bool'
+            print(f'Error de tipos de operandos para {expr.getChild(1).getText()}: "{left_type}" y "{right_type}" (línea {expr.start.line})')
+            return "Error"
+        elif expr.getChildCount() == 2 and expr.getChild(0).getText() in ['~', '-', 'not']: # unary operators
+            expr_type = self.get_expr_type(expr.getChild(1))
+            if expr_type == 'Int' and expr.getChild(0).getText() != 'not':
+                return 'Int'
+            elif expr_type == 'Bool' and expr.getChild(0).getText() in ['~', 'not']:
+                return 'Bool'
+            print(f'Error de tipo de operando para {expr.getChild(0).getText()}: "{expr_type}" (línea {expr.start.line})')
+            return "Error"
+        elif expr.getChildCount() == 1:
+            if isinstance(expr.getChild(0), YAPLParser.IdContext): # id
+                if self.classes[self.current_class].has_attribute(self.current_method, expr.getText()):
+                    return self.classes[self.current_class].get_attribute_type(self.current_method, expr.getText())
+                print(f'El símbolo {expr.getText()} no ha sido definido (línea {expr.start.line})')
+                return 'Error'
+            elif expr.getChild(0).getSymbol().type == YAPLParser.INTEGER: # int
+                return 'Int'
+            elif expr.getChild(0).getSymbol().type == YAPLParser.STRING: # str
+                return 'String'
+            elif expr.getChild(0).getSymbol().type in [YAPLParser.TRUE, YAPLParser.FALSE]: #bool
+                return 'Bool'
+            elif expr.getText() == "self": # self
+                return self.current_class
+            return "Error"
+        # for child in expr.getChildren():
+        #     if isinstance(child, TerminalNode):
+        #         if child.getSymbol().type == YAPLParser.INTEGER:
+        #             return 'Int'
+        #         elif child.getSymbol().type == YAPLParser.STRING:
+        #             return 'String'
+        #         elif child.getSymbol().type in [YAPLParser.TRUE, YAPLParser.FALSE]:
+        #             return 'Bool'
+        #         elif child.getSymbol().type == YAPLParser.OBJECT_ID:
+        #             return self.visitId(child)
+        if expr.id_() and expr.expr():
+            object_type = self.get_expr_type(expr.expr()[0])
+            method_name = expr.id_()[0].getText()
+            if object_type in self.classes:
+                method_type = self.classes[object_type].get(method_name)
+                if method_type:
+                    return method_type
+
+        return 'Error'
 
     def visitAssign(self, ctx):
         id_name = ctx.id_()[0].getText()
@@ -152,59 +217,6 @@ class TypeCheckingVisitor(YAPLVisitor):
             return result
 
 
-    def get_expr_type(self, expr):
-        if expr.getChildCount() == 3 and expr.getChild(1).getText() in ['+', '-', '*', '/']:
-            left_type = self.get_expr_type(expr.getChild(0))
-            right_type = self.get_expr_type(expr.getChild(2))
-            if left_type == 'Int' and right_type == 'Int':
-                return 'Int'
-            print(f'Error de tipos de operandos para {expr.getChild(1).getText()}: "{left_type}" y "{right_type}" (línea {expr.start.line})')
-        elif expr.getChildCount() == 3 and expr.getChild(1).getText() in ['<', '<=', '=']:
-            left_type = self.get_expr_type(expr.getChild(0))
-            right_type = self.get_expr_type(expr.getChild(2))
-            if (left_type == 'Int' and right_type == 'Int') or \
-               (left_type == 'Bool' and right_type == 'Bool') or \
-               (left_type == 'String' and right_type == 'String'):
-                return 'Bool'
-            print(f'Error de tipos de operandos para {expr.getChild(1).getText()}: "{left_type}" y "{right_type}" (línea {expr.start.line})')
-        elif expr.getChildCount() == 2 and expr.getChild(0).getText() == '~':
-            expr_type = self.get_expr_type(expr.getChild(1))
-            if expr_type == 'Int':
-                return 'Int'
-            elif expr_type == 'Bool':
-                return 'Bool'
-            else:
-                print(f'Error de tipo de operando para ~: "{expr_type}" (línea {expr.start.line})')
-        elif expr.getChildCount() == 2 and expr.getChild(0).getText() == 'not':
-            expr_type = self.get_expr_type(expr.getChild(1))
-            if expr_type == 'Bool':
-                return 'Bool'
-            else:
-                print(f'Error de tipo de operando para "not": "{expr_type}" (línea {expr.start.line})')
-        elif expr.getChildCount() == 1 and isinstance(expr.getChild(0), YAPLParser.IdContext):
-            if self.classes[self.current_class].has_attribute(self.current_method, expr.getText()):
-                return self.classes[self.current_class].get_attribute_type(self.current_method, expr.getText())
-            else:
-                print(f'El símbolo {expr.getText()} no ha sido definido (línea {expr.start.line})')
-                return 'Error'
-        for child in expr.getChildren():
-            if isinstance(child, TerminalNode):
-                if child.getSymbol().type == YAPLParser.INTEGER:
-                    return 'Int'
-                elif child.getSymbol().type == YAPLParser.STRING:
-                    return 'String'
-                elif child.getSymbol().type in [YAPLParser.TRUE, YAPLParser.FALSE]:
-                    return 'Bool'
-                elif child.getSymbol().type == YAPLParser.OBJECT_ID:
-                    return self.visitId(child)
-        if expr.id_() and expr.expr():
-            object_type = self.get_expr_type(expr.expr()[0])
-            method_name = expr.id_()[0].getText()
-            if object_type in self.classes:
-                method_type = self.classes[object_type].get(method_name)
-                if method_type:
-                    return method_type
-        return 'Error'
 
 
     def verify_main_class(self):
@@ -212,7 +224,7 @@ class TypeCheckingVisitor(YAPLVisitor):
         if 'Main' not in self.classes:
             print("Error: La clase 'Main' no está definida.")
             return
-        
+
         # Verificar que la clase 'Main' tiene un método llamado 'main'
         main_class_methods = self.classes['Main'].methods
         if 'main' not in main_class_methods:
@@ -224,7 +236,7 @@ class TypeCheckingVisitor(YAPLVisitor):
         if main_method_type != 'Int':
             print(f"Error: El método 'main' en la clase 'Main' tiene un tipo de retorno incorrecto: '{main_method_type}'. Se esperaba 'Int'.")
             return
-                
+
         print("La clase 'Main' es válida.")
 
 
@@ -289,8 +301,8 @@ def main(argv):
     lexer = YAPLLexer(input_stream)
     stream = CommonTokenStream(lexer)
     parser = YAPLParser(stream)
-    parser.removeErrorListeners()  
-    parser.addErrorListener(MyListener())  
+    parser.removeErrorListeners()
+    parser.addErrorListener(MyListener())
 
     tree = parser.source()
 
