@@ -81,6 +81,42 @@ class TypeCheckingVisitor(YAPLVisitor):
             for child in expr.expr():
                 code_block_type = self.get_expr_type(child)
             return code_block_type
+        elif expr.getChildCount() == 7 and expr.getChild(0).getSymbol().type == YAPLParser.IF: #If
+            conditional_type = self.get_expr_type(expr.getChild(1))
+            if conditional_type not in ["Bool", "Int"]:
+                print(f"Se esperaba tipo Bool pero se obtuvo tipo {conditional_type} (línea {expr.start.line})")
+                return "Error"
+            then_type = self.get_expr_type(expr.getChild(3))
+            else_type = self.get_expr_type(expr.getChild(5))
+
+            # calculando el supertipo
+            if then_type in self.inheritance_info and else_type in self.inheritance_info:
+                if self.inheritance_info[then_type] == self.inheritance_info[else_type]:
+                    return self.inheritance_info[then_type]
+            elif then_type in self.inheritance_info:
+                if self.inheritance_info[then_type] == else_type:
+                    return else_type
+            elif else_type in self.inheritance_info:
+                if then_type == self.inheritance_info[else_type]:
+                    return then_type
+            elif then_type == else_type:
+                return then_type
+            print(f"Los tipos de las ramas then y else difieren: {then_type}, {else_type} (línea {expr.start.line})")
+            return "Error"
+        elif expr.getChildCount() == 5 and expr.getChild(0).getSymbol().type == YAPLParser.WHILE:
+            conditional_type = self.get_expr_type(expr.getChild(1))
+            if conditional_type not in ["Bool", "Int"]:
+                print(f"Se esperaba tipo Bool pero se obtuvo tipo {conditional_type} (línea {expr.start.line})")
+                return "Error"
+            if self.get_expr_type(expr.getChild(3)) == "Error":
+                return "Error"
+            return "Object"
+        elif expr.getChildCount() >= 3 and expr.getChild(1).getText() == "(":
+            method_name = expr.getChild(0).getText()
+            if method_name not in self.classes[self.current_class].methods:
+                print(f"El método {method_name} no ha sido declarado. (línea {expr.start.line})")
+                return "Error"
+            return self.classes[self.current_class].methods[method_name].return_type
         elif expr.getChildCount() == 3 and expr.getChild(1).getText() == "<-": # assign
             return self.visitAssign(expr)
         elif expr.getChildCount() == 3 and expr.getChild(0).getText() == "(":
@@ -109,6 +145,16 @@ class TypeCheckingVisitor(YAPLVisitor):
                 return 'Bool'
             print(f'Error de tipo de operando para {expr.getChild(0).getText()}: "{expr_type}" (línea {expr.start.line})')
             return "Error"
+        elif expr.getChildCount() == 2 and expr.getChild(0).getSymbol().type == YAPLParser.NEW:
+            class_name = expr.getChild(1).getText()
+            if class_name not in self.classes:
+                print(f"La clase {class_name} no ha sido declarada. (línea {expr.start.line})")
+                return "Error"
+            return class_name
+        elif expr.getChildCount() == 2 and expr.getChild(0).getSymbol().type == YAPLParser.ISVOID:
+            if self.get_expr_type(expr.getChild(1)) == "Error":
+                return "Error"
+            return "Bool"
         elif expr.getChildCount() == 1:
             if isinstance(expr.getChild(0), YAPLParser.IdContext): # id
                 if self.classes[self.current_class].has_attribute(self.current_method, expr.getText()):
