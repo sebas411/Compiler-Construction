@@ -30,8 +30,6 @@ class TypeCheckingVisitor(YAPLVisitor):
                 print(f"La clase {inherited_class} no ha sido definida (línea {ctx.start.line})")
                 self.inheritance_info[self.current_class] = None
 
-        else:
-            self.inheritance_info[self.current_class] = None
 
         self.visitChildren(ctx)
         self.current_class = None
@@ -90,7 +88,9 @@ class TypeCheckingVisitor(YAPLVisitor):
             else_type = self.get_expr_type(expr.getChild(5))
 
             # calculando el supertipo
-            if then_type in self.inheritance_info and else_type in self.inheritance_info:
+            if then_type == else_type:
+                return then_type
+            elif then_type in self.inheritance_info and else_type in self.inheritance_info:
                 if self.inheritance_info[then_type] == self.inheritance_info[else_type]:
                     return self.inheritance_info[then_type]
             elif then_type in self.inheritance_info:
@@ -99,8 +99,6 @@ class TypeCheckingVisitor(YAPLVisitor):
             elif else_type in self.inheritance_info:
                 if then_type == self.inheritance_info[else_type]:
                     return then_type
-            elif then_type == else_type:
-                return then_type
             print(f"Los tipos de las ramas then y else difieren: {then_type}, {else_type} (línea {expr.start.line})")
             return "Error"
         elif expr.getChildCount() == 5 and expr.getChild(0).getSymbol().type == YAPLParser.WHILE:
@@ -111,6 +109,27 @@ class TypeCheckingVisitor(YAPLVisitor):
             if self.get_expr_type(expr.getChild(3)) == "Error":
                 return "Error"
             return "Object"
+        elif expr.getChildCount() >= 5 and (expr.getChild(1).getText() == "." or expr.getChild(3).getText() == "."):
+            class_type = self.get_expr_type(expr.getChild(0))
+            if class_type not in self.classes:
+                print(f"La clase {class_type} no ha sido declarada. (línea {expr.start.line})")
+                return "Error"
+            if expr.getChild(1).getText() == "@":
+                parent_class = expr.getChild(2).getText()
+                if class_type not in self.inheritance_info or self.inheritance_info[class_type] != parent_class:
+                    print(f"La clase {class_type} no hereda de {parent_class}. (línea {expr.start.line})")
+                    return "Error"
+                method_name = expr.getChild(4).getText()
+                if method_name not in self.classes[parent_class].methods:
+                    print(f"El método {method_name} no ha sido declarado en la clase {parent_class}. (línea {expr.start.line})")
+                    return "Error"
+                return self.classes[parent_class].methods[method_name].return_type
+            else:
+                method_name = expr.getChild(2).getText()
+                if method_name not in self.classes[class_type].methods:
+                    print(f"El método {method_name} no ha sido declarado en la clase {class_type}. (línea {expr.start.line})")
+                    return "Error"
+                return self.classes[class_type].methods[method_name].return_type
         elif expr.getChildCount() >= 3 and expr.getChild(1).getText() == "(":
             method_name = expr.getChild(0).getText()
             if method_name not in self.classes[self.current_class].methods:
