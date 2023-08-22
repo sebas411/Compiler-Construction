@@ -6,8 +6,8 @@ class ClassObj(object):
         self.attributes = {}
     
     def inherit(self, o_class):
-        self.methods = o_class.methods
-        self.attributes = o_class.attributes
+        self.methods = o_class.methods.copy()
+        self.attributes = o_class.attributes.copy()
     
     def get_attribute_type(self, current_method, active_lets, attribute_name):
         if current_method and attribute_name in self.methods[current_method].params.keys():

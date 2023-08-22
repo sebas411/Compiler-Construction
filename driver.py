@@ -59,8 +59,6 @@ class TypeCheckingVisitor(YAPLVisitor):
             self.classes[self.current_class].attributes[attribute_name] = attribute_type
             if ctx.expr():
                 self.get_expr_type(ctx.expr())
-        #self.visitChildren(ctx)
-        # print(f"Tabla de clases después de visitar la característica: {self.classes}")
 
 
     def visitChildren(self, node):
@@ -82,7 +80,7 @@ class TypeCheckingVisitor(YAPLVisitor):
             for child in expr.expr():
                 code_block_type = self.get_expr_type(child)
             return code_block_type
-        elif expr.getChildCount() == 7 and expr.getChild(0).getSymbol().type == YAPLParser.IF: #If
+        elif expr.getChildCount() == 7 and expr.getChild(0).getSymbol().type == YAPLParser.IF: # If
             conditional_type = self.get_expr_type(expr.getChild(1))
             if conditional_type not in ["Bool", "Int"]:
                 print(f"Se esperaba tipo Bool pero se obtuvo tipo {conditional_type} (línea {expr.start.line})")
@@ -127,15 +125,7 @@ class TypeCheckingVisitor(YAPLVisitor):
             let_type = self.get_expr_type(expr.expr()[-1])
             self.active_lets.pop()
             return let_type
-        elif expr.getChildCount() == 5 and expr.getChild(0).getSymbol().type == YAPLParser.WHILE:
-            conditional_type = self.get_expr_type(expr.getChild(1))
-            if conditional_type not in ["Bool", "Int"]:
-                print(f"Se esperaba tipo Bool pero se obtuvo tipo {conditional_type} (línea {expr.start.line})")
-                return "Error"
-            if self.get_expr_type(expr.getChild(3)) == "Error":
-                return "Error"
-            return "Object"
-        elif expr.getChildCount() >= 5 and (expr.getChild(1).getText() == "." or expr.getChild(3).getText() == "."):
+        elif expr.getChildCount() >= 5 and (expr.getChild(1).getText() == "." or expr.getChild(3).getText() == "."): # class.method call
             class_type = self.get_expr_type(expr.getChild(0))
             if class_type not in self.classes:
                 print(f"La clase {class_type} no ha sido declarada. (línea {expr.start.line})")
@@ -146,25 +136,58 @@ class TypeCheckingVisitor(YAPLVisitor):
                     print(f"La clase {class_type} no hereda de {parent_class}. (línea {expr.start.line})")
                     return "Error"
                 method_name = expr.getChild(4).getText()
-                if method_name not in self.classes[parent_class].methods:
-                    print(f"El método {method_name} no ha sido declarado en la clase {parent_class}. (línea {expr.start.line})")
-                    return "Error"
-                return self.classes[parent_class].methods[method_name].return_type
+                called_class = parent_class
             else:
                 method_name = expr.getChild(2).getText()
-                if method_name not in self.classes[class_type].methods:
-                    print(f"El método {method_name} no ha sido declarado en la clase {class_type}. (línea {expr.start.line})")
-                    return "Error"
-                return self.classes[class_type].methods[method_name].return_type
-        elif expr.getChildCount() >= 3 and expr.getChild(1).getText() == "(":
+                called_class = class_type
+            if method_name not in self.classes[called_class].methods:
+                print(f"El método {method_name} no ha sido declarado en la clase {called_class}. (línea {expr.start.line})")
+                return "Error"
+            print(called_class, self.classes[called_class].methods)
+            param_types = [self.get_expr_type(param) for param in expr.expr()[1:]]
+            method_params = self.classes[called_class].methods[method_name].params
+            method_param_num = len(method_params)
+            param_num = len(param_types)
+            if param_num != method_param_num:
+                print(f"En la llamada del método {method_name} se esperaban {method_param_num} parámetros pero se obtuvieron {param_num}. (línea {expr.start.line})")
+                return "Error"
+            foundError = False
+            for i in range(param_num):
+                if not self.check_casting(list(method_params.values())[i], param_types[i]):
+                    foundError = True
+                    print(f"Error de tipo para el parámetro '{list(method_params.keys())[i]}'. Se esperaba el tipo '{list(method_params.values())[i]}' pero se obtuvo '{param_types[i]}'. (línea {expr.start.line})")
+            if foundError: return "Error"
+            return self.classes[called_class].methods[method_name].return_type
+        elif expr.getChildCount() == 5 and expr.getChild(0).getSymbol().type == YAPLParser.WHILE: # While
+            conditional_type = self.get_expr_type(expr.getChild(1))
+            if conditional_type not in ["Bool", "Int"]:
+                print(f"Se esperaba tipo Bool pero se obtuvo tipo {conditional_type} (línea {expr.start.line})")
+                return "Error"
+            if self.get_expr_type(expr.getChild(3)) == "Error":
+                return "Error"
+            return "Object"
+        elif expr.getChildCount() >= 3 and expr.getChild(1).getText() == "(": # method call
             method_name = expr.getChild(0).getText()
             if method_name not in self.classes[self.current_class].methods:
                 print(f"El método {method_name} no ha sido declarado. (línea {expr.start.line})")
                 return "Error"
+            param_types = [self.get_expr_type(param) for param in expr.expr()]
+            method_params = self.classes[self.current_class].methods[method_name].params
+            method_param_num = len(method_params)
+            param_num = len(param_types)
+            if param_num != method_param_num:
+                print(f"En la llamada del método {method_name} se esperaban {method_param_num} parámetros pero se obtuvieron {param_num}. (línea {expr.start.line})")
+                return "Error"
+            foundError = False
+            for i in range(param_num):
+                if not self.check_casting(list(method_params.values())[i], param_types[i]):
+                    foundError = True
+                    print(f"Error de tipo para el parámetro '{list(method_params.keys())[i]}'. Se esperaba el tipo '{list(method_params.values())[i]}' pero se obtuvo '{param_types[i]}'. (línea {expr.start.line})")
+            if foundError: return "Error"
             return self.classes[self.current_class].methods[method_name].return_type
         elif expr.getChildCount() == 3 and expr.getChild(1).getText() == "<-": # assign
             return self.visitAssign(expr)
-        elif expr.getChildCount() == 3 and expr.getChild(0).getText() == "(":
+        elif expr.getChildCount() == 3 and expr.getChild(0).getText() == "(": # parentheses
             return self.get_expr_type(expr.getChild(1))
         elif expr.getChildCount() == 3 and expr.getChild(1).getText() in ['+', '-', '*', '/']: # arith operations
             left_type = self.get_expr_type(expr.getChild(0))
@@ -190,17 +213,17 @@ class TypeCheckingVisitor(YAPLVisitor):
                 return 'Bool'
             print(f'Error de tipo de operando para {expr.getChild(0).getText()}: "{expr_type}" (línea {expr.start.line})')
             return "Error"
-        elif expr.getChildCount() == 2 and expr.getChild(0).getSymbol().type == YAPLParser.NEW:
+        elif expr.getChildCount() == 2 and expr.getChild(0).getSymbol().type == YAPLParser.NEW: # new
             class_name = expr.getChild(1).getText()
             if class_name not in self.classes:
                 print(f"La clase {class_name} no ha sido declarada. (línea {expr.start.line})")
                 return "Error"
             return class_name
-        elif expr.getChildCount() == 2 and expr.getChild(0).getSymbol().type == YAPLParser.ISVOID:
+        elif expr.getChildCount() == 2 and expr.getChild(0).getSymbol().type == YAPLParser.ISVOID: # isvoid
             if self.get_expr_type(expr.getChild(1)) == "Error":
                 return "Error"
             return "Bool"
-        elif expr.getChildCount() == 1:
+        elif expr.getChildCount() == 1: # single child
             if isinstance(expr.getChild(0), YAPLParser.IdContext): # id
                 if self.classes[self.current_class].has_attribute(self.current_method, self.active_lets, expr.getText()):
                     return self.classes[self.current_class].get_attribute_type(self.current_method, self.active_lets, expr.getText())
@@ -364,7 +387,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                 print(f"Tipo desconocido '{variable_type}' para la variable '{variable_name}'. No se pudo inicializar con un valor por defecto.")
 
 
-    def check_casting(self, expr_type, expected_type, ctx):
+    def check_casting(self, expr_type, expected_type):
         if expr_type == expected_type:
             return True
 
@@ -376,8 +399,6 @@ class TypeCheckingVisitor(YAPLVisitor):
             # Bool a Int: False es 0, True es 1.
             return True
 
-        # Si llegamos aquí, no se permite la conversión
-        print(f"Error de casteo, No se puede convertir '{expr_type}' a '{expected_type}'.")
         return False
 
 
