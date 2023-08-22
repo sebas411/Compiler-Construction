@@ -15,6 +15,8 @@ class TypeCheckingVisitor(YAPLVisitor):
         self.current_method = None
         self.classes = {}
         self.inheritance_info = {}
+        self.active_lets = []
+        self.last_let = 0
 
     def visitClass_prod(self, ctx:YAPLParser.Class_prodContext):
         self.current_class = ctx.TYPE_ID(0).getText()
@@ -49,6 +51,7 @@ class TypeCheckingVisitor(YAPLVisitor):
             self.classes[self.current_class].methods[method_name] = Method(method_type, params)
             return_type = self.get_expr_type(ctx.expr())
             print(return_type)
+            self.current_method = None
 
         else: # attribute
             attribute_name = ctx.id_().getText()
@@ -101,6 +104,29 @@ class TypeCheckingVisitor(YAPLVisitor):
                     return then_type
             print(f"Los tipos de las ramas then y else difieren: {then_type}, {else_type} (línea {expr.start.line})")
             return "Error"
+        elif expr.getChildCount() >= 6 and expr.getChild(0).getText() == "let": # let
+            self.last_let += 1
+            let_name = f"let{self.last_let}"
+            num_of_params = len(expr.id_())
+            params = {}
+            for i in range(num_of_params):
+                if expr.id_(i).getText() not in params:
+                    params[expr.id_(i).getText()] = expr.TYPE_ID(i).getText()
+                else:
+                    print(f"Variable local '{expr.id_(i).getText()}' definida múltiples veces (línea {expr.start.line})")
+                    return "Error"
+
+            for param in params.keys():
+                if self.classes[self.current_class].has_attribute(self.current_method, self.active_lets, param):
+                    print(f"Variable local '{param}' definida previamente (línea {expr.start.line})")
+                    return "Error"
+            for i in range(len(expr.expr())-1):
+                self.get_expr_type(expr.expr(i))
+            self.classes[self.current_class].lets[let_name] = params
+            self.active_lets.append(let_name)
+            let_type = self.get_expr_type(expr.expr()[-1])
+            self.active_lets.pop()
+            return let_type
         elif expr.getChildCount() == 5 and expr.getChild(0).getSymbol().type == YAPLParser.WHILE:
             conditional_type = self.get_expr_type(expr.getChild(1))
             if conditional_type not in ["Bool", "Int"]:
@@ -176,8 +202,8 @@ class TypeCheckingVisitor(YAPLVisitor):
             return "Bool"
         elif expr.getChildCount() == 1:
             if isinstance(expr.getChild(0), YAPLParser.IdContext): # id
-                if self.classes[self.current_class].has_attribute(self.current_method, expr.getText()):
-                    return self.classes[self.current_class].get_attribute_type(self.current_method, expr.getText())
+                if self.classes[self.current_class].has_attribute(self.current_method, self.active_lets, expr.getText()):
+                    return self.classes[self.current_class].get_attribute_type(self.current_method, self.active_lets, expr.getText())
                 print(f'El símbolo {expr.getText()} no ha sido definido (línea {expr.start.line})')
                 return 'Error'
             elif expr.getChild(0).getSymbol().type == YAPLParser.INTEGER: # int
@@ -189,32 +215,14 @@ class TypeCheckingVisitor(YAPLVisitor):
             elif expr.getText() == "self": # self
                 return self.current_class
             return "Error"
-        # for child in expr.getChildren():
-        #     if isinstance(child, TerminalNode):
-        #         if child.getSymbol().type == YAPLParser.INTEGER:
-        #             return 'Int'
-        #         elif child.getSymbol().type == YAPLParser.STRING:
-        #             return 'String'
-        #         elif child.getSymbol().type in [YAPLParser.TRUE, YAPLParser.FALSE]:
-        #             return 'Bool'
-        #         elif child.getSymbol().type == YAPLParser.OBJECT_ID:
-        #             return self.visitId(child)
-        if expr.id_() and expr.expr():
-            object_type = self.get_expr_type(expr.expr()[0])
-            method_name = expr.id_()[0].getText()
-            if object_type in self.classes:
-                method_type = self.classes[object_type].get(method_name)
-                if method_type:
-                    return method_type
-
         return 'Error'
 
     def visitAssign(self, ctx):
         id_name = ctx.id_()[0].getText()
-        if not self.classes[self.current_class].has_attribute(self.current_method, id_name):
+        if not self.classes[self.current_class].has_attribute(self.current_method, self.active_lets, id_name):
             print(f'El símbolo {id_name} no ha sido definido (línea {ctx.start.line})')
             return 'Error'
-        id_type = self.classes[self.current_class].get_attribute_type(self.current_method, id_name)
+        id_type = self.classes[self.current_class].get_attribute_type(self.current_method, self.active_lets, id_name)
         expr_type = self.get_expr_type(ctx.expr(0))
 
         if id_type != expr_type:

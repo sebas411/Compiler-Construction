@@ -37,7 +37,6 @@ expr: expr ('@' TYPE_ID)? '.'id '(' (expr (',' expr)*)? ')'
         | IF expr THEN expr ELSE expr FI
         | WHILE expr LOOP expr POOL
         | '{' (expr ';')+ '}'
-        | 'let' id ':' TYPE_ID ('<-' expr)? (',' id ':' TYPE_ID ('<-' expr)?)* 'in' expr
         | NEW TYPE_ID
         | ISVOID expr
         | ('-'|'~') expr
@@ -51,6 +50,7 @@ expr: expr ('@' TYPE_ID)? '.'id '(' (expr (',' expr)*)? ')'
         | NOT expr
         | '(' expr ')'
         | id '<-' expr
+        | 'let' id ':' TYPE_ID ('<-' expr)? (',' id ':' TYPE_ID ('<-' expr)?)* 'in' expr
         | id
         | INTEGER
         | STRING
