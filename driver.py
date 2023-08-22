@@ -18,7 +18,22 @@ class TypeCheckingVisitor(YAPLVisitor):
         self.active_lets = []
         self.last_let = 0
 
+        # Agregar las clases especiales
+        self.classes['IO'] = ClassObj('IO')
+        self.classes['IO'].methods['in_int'] = Method('Int', {})
+        self.classes['IO'].methods['in_bool'] = Method('Bool', {})
+        self.classes['IO'].methods['out_int'] = Method('IO', {'x': 'Int'})
+        self.classes['IO'].methods['out_bool'] = Method('IO', {'x': 'Bool'})
 
+        self.classes['Int'] = ClassObj('Int')
+        # Agregar métodos predefinidos para Int si los hay
+
+        self.classes['String'] = ClassObj('String')
+        # Agregar métodos predefinidos para String si los hay
+
+        self.classes['Bool'] = ClassObj('Bool')
+        # Agregar métodos predefinidos para Bool si los hay
+        
     def setClasses(self, source:YAPLParser.SourceContext):
         for class_ in source.class_prod():
             class_name = class_.getChild(1).getText()
@@ -403,7 +418,7 @@ def main(argv):
     visitor.verify_main_class()
     visitor.verify_inheritance_rules()
 
-    if parser.getNumberOfSyntaxErrors() == 0:
+    if parser.getNumberOfSyntaxErrors() == 0 and not visitor.found_errors:
         # Generar representación gráfica
         dot = Digraph(comment='Abstract Syntax Tree')
         visualize_tree(tree, dot)

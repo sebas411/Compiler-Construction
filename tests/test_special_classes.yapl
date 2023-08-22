@@ -1,0 +1,22 @@
+class Main {
+  io : IO;
+  i : Int;
+  s : String;
+  b : Bool;
+
+  main() : Int {
+    {
+      io <- new IO;
+
+      -- Uso de métodos de la clase IO
+      i <- io.in_int();
+      io.out_int(i);
+
+      b <- io.in_bool();
+      io.out_bool(b);
+
+      -- Uso de métodos de la clase Int, String y Bool si los hay
+      -- ...
+    }
+  };
+};

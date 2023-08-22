@@ -1,0 +1,17 @@
+class Main {
+  io : IO;
+  i : Int;
+  b : Bool;
+
+  main() : Int {
+    {
+      io <- new IO;
+
+      -- Intento de usar un método no definido en la clase IO
+      i <- io.undefined_method();
+
+      -- Asignación incorrecta de un valor Bool a una variable Int
+      i <- true;
+    }
+  };
+};
