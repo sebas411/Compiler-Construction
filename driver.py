@@ -18,37 +18,52 @@ class TypeCheckingVisitor(YAPLVisitor):
         self.active_lets = []
         self.last_let = 0
 
+
+    def setClasses(self, source:YAPLParser.SourceContext):
+        for class_ in source.class_prod():
+            class_name = class_.getChild(1).getText()
+            self.classes[class_name] = ClassObj(class_name)
+            if class_.INHERITS():
+                inherited_class = class_.TYPE_ID(1).getText()
+                if inherited_class in self.classes:
+                    self.classes[class_name].inherit(self.classes[inherited_class])
+                    self.inheritance_info[class_name] = inherited_class
+                else:
+                    print(f"La clase {inherited_class} no ha sido definida (línea {class_.start.line})")
+                    self.inheritance_info[self.current_class] = None
+            for feature in class_.feature():
+                self.setFeature(feature, class_name)
+    
+
+    def setFeature(self, feature:YAPLParser.FeatureContext, class_name):
+        if feature.getChild(1).getText() == "(": # method
+            method_name = feature.id_().getText()
+            method_type = feature.TYPE_ID().getText()
+            params = {}
+            for param in feature.formal():
+                param_type = param.TYPE_ID().getText()
+                param_name = param.id_().getText()
+                params[param_name] = param_type
+            self.classes[class_name].methods[method_name] = Method(method_type, params)
+
+        else: # attribute
+            attribute_name = feature.id_().getText()
+            attribute_type = feature.TYPE_ID().getText()
+            self.classes[class_name].attributes[attribute_name] = attribute_type
+
+
+
     def visitClass_prod(self, ctx:YAPLParser.Class_prodContext):
         self.current_class = ctx.TYPE_ID(0).getText()
-        self.classes[self.current_class] = ClassObj(self.current_class)
-        #self.symbol_table.append(ClassObj(self.current_class))  # crea un nuevo ámbito para la clase
-
-        if ctx.INHERITS():
-            inherited_class = ctx.TYPE_ID(1).getText()
-            if inherited_class in self.classes:
-                self.classes[self.current_class].inherit(self.classes[inherited_class])
-                self.inheritance_info[self.current_class] = inherited_class
-            else:
-                print(f"La clase {inherited_class} no ha sido definida (línea {ctx.start.line})")
-                self.inheritance_info[self.current_class] = None
-
-
         self.visitChildren(ctx)
         self.current_class = None
 
 
     def visitFeature(self, ctx:YAPLParser.FeatureContext):
-
         if ctx.getChild(1).getText() == "(": # method
             method_name = ctx.id_().getText()
             method_type = ctx.TYPE_ID().getText()
             self.current_method = method_name
-            params = {}
-            for param in ctx.formal():
-                param_type = param.TYPE_ID().getText()
-                param_name = param.id_().getText()
-                params[param_name] = param_type
-            self.classes[self.current_class].methods[method_name] = Method(method_type, params)
             return_type = self.get_expr_type(ctx.expr())
             print(return_type)
             self.current_method = None
@@ -56,7 +71,6 @@ class TypeCheckingVisitor(YAPLVisitor):
         else: # attribute
             attribute_name = ctx.id_().getText()
             attribute_type = ctx.TYPE_ID().getText()
-            self.classes[self.current_class].attributes[attribute_name] = attribute_type
             if ctx.expr():
                 self.get_expr_type(ctx.expr())
 
@@ -131,19 +145,29 @@ class TypeCheckingVisitor(YAPLVisitor):
                 print(f"La clase {class_type} no ha sido declarada. (línea {expr.start.line})")
                 return "Error"
             if expr.getChild(1).getText() == "@":
-                parent_class = expr.getChild(2).getText()
-                if class_type not in self.inheritance_info or self.inheritance_info[class_type] != parent_class:
-                    print(f"La clase {class_type} no hereda de {parent_class}. (línea {expr.start.line})")
-                    return "Error"
+                target_class = expr.getChild(2).getText()
+                child_class = class_type
+                visited = [class_type]
+                while True:
+                    if child_class not in self.inheritance_info:
+                        print(f"La clase {class_type} no hereda de {target_class}. (línea {expr.start.line})")
+                        return "Error"
+                    parent_class = self.inheritance_info[child_class]
+                    if parent_class == target_class:
+                        break
+                    if parent_class in visited:
+                        print(f"Error de heredación recursiva (línea {expr.start.line})")
+                        return "Error"
+                    child_class = parent_class
+
                 method_name = expr.getChild(4).getText()
-                called_class = parent_class
+                called_class = target_class
             else:
                 method_name = expr.getChild(2).getText()
                 called_class = class_type
             if method_name not in self.classes[called_class].methods:
                 print(f"El método {method_name} no ha sido declarado en la clase {called_class}. (línea {expr.start.line})")
                 return "Error"
-            print(called_class, self.classes[called_class].methods)
             param_types = [self.get_expr_type(param) for param in expr.expr()[1:]]
             method_params = self.classes[called_class].methods[method_name].params
             method_param_num = len(method_params)
@@ -252,67 +276,6 @@ class TypeCheckingVisitor(YAPLVisitor):
             print(f"Error de tipo se esperaba '{id_type}' pero se obtuvo '{expr_type}' (linea {ctx.start.line})")
             return "Error"
         return id_type
-
-    def visitExprWithTwoChildren(self, ctx):
-        left_type = self.visit(ctx.expr(0))  # visita el hijo izquierdo
-        right_type = self.visit(ctx.expr(1))  # visita el hijo derecho
-        if left_type != right_type or left_type != 'Int':
-            print(f"Error de tipo: se esperaba 'Int' pero se obtuvo '{left_type}' y '{right_type}'")
-        return 'Int'  # asume que la operación fue exitosa y devuelve 'Int'
-
-
-    def visitExprWithNot(self, ctx):
-        expr_type = self.get_expr_type(ctx.expr(0))
-        if expr_type != 'Bool':
-            print(f"Error de tipo: se esperaba 'Bool' pero se obtuvo '{expr_type}'")
-
-    def visitExprWithAdd(self, ctx):
-        left_type = self.get_expr_type(ctx.expr(0))
-        right_type = self.get_expr_type(ctx.expr(1))
-        if left_type == 'Int' and right_type == 'Int':
-            return 'Int'
-        else:
-            print(f"Error de tipo: no se puede sumar '{left_type}' y '{right_type}'")
-            return None
-
-
-
-    def visitExprInFunction(self, ctx):
-        function_name = ctx.id_().getText()
-        function_type = self.classes[self.current_class].methods[function_name].return_type
-        if function_type is None:
-            print(f"Error: función '{function_name}' no definida")
-            return
-        if len(ctx.expr()) != len(function_type) - 1:
-            print(f"Error: número incorrecto de argumentos para la función '{function_name}'")
-        else:
-            for expected_arg_type, actual_arg_expr in zip(function_type[1:], ctx.expr()):
-                actual_arg_type = self.get_expr_type(actual_arg_expr)
-                if expected_arg_type != actual_arg_type:
-                    print(f"Error de tipo: se esperaba '{expected_arg_type}' pero se obtuvo '{actual_arg_type}' para el argumento de la función '{function_name}'")
-
-
-    def visitExpr(self, ctx):
-        if ctx.id_() and ctx.expr():
-           self.visitAssign(ctx)
-        elif ctx.expr() and len(ctx.expr()) == 2:
-            self.visitExprWithTwoChildren(ctx)
-        elif ctx.NOT():
-            self.visitExprWithNot(ctx)
-        elif ctx.getChild(0).getText() == '{':
-            for expre in ctx.expr():
-                self.visitExpr(expre)
-        else:
-            # Llama a la visita de los hijos directamente sin visitChildren
-            result = []
-            for child in ctx.getChildren():
-                if isinstance(child, YAPLParser.ExprContext):
-                    childResult = self.visitExpr(child)
-                    if childResult is not None:
-                        result.append(childResult)
-            return result
-
-
 
 
     def verify_main_class(self):
@@ -435,6 +398,7 @@ def main(argv):
     tree = parser.source()
 
     visitor = TypeCheckingVisitor()
+    visitor.setClasses(tree)
     visitor.visit(tree)
     visitor.verify_main_class()
     visitor.verify_inheritance_rules()
