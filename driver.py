@@ -496,9 +496,9 @@ def main(argv):
         # Generar representación textual
         textual_representation = Trees.toStringTree(tree, None, parser)
         #print(textual_representation)
-        print("Code compiled successfully")
+        print("Código compilado exitosamente")
     else:
-        print("Se encontraron errores durante el análisis. No se generará ningún árbol.")
+        print("Se encontraron errores durante el análisis. Compilación falló.")
 
 if __name__ == '__main__':
     main(sys.argv)
