@@ -1,0 +1,13 @@
+class Main {
+  if : String;
+  main() : Int {
+    {
+      z <- "Hola";
+    };
+  };
+};
+
+class Test {
+    while: Int;
+    fi: Int;
+};

@@ -34,6 +34,8 @@ class TypeCheckingVisitor(YAPLVisitor):
 
         self.classes['Bool'] = ClassObj('Bool')
         # Agregar métodos predefinidos para Bool si los hay
+
+        self.RESERVED_WORDS = {"class", "else", "fi", "if", "in", "inherits", "isvoid", "loop", "pool", "then", "while", "new", "not", "false", "true"}
         
     def setClasses(self, source:YAPLParser.SourceContext):
         for class_ in source.class_prod():
@@ -53,7 +55,7 @@ class TypeCheckingVisitor(YAPLVisitor):
             for feature in class_.feature():
                 self.setFeature(feature, class_name)
     
-    def method_exists_in_class_or_superclasses(self, method_name, class_name):
+    def methodInSuperclass(self, method_name, class_name):
         current_class = class_name
         while current_class is not None:
             if method_name in self.classes[current_class].methods:
@@ -61,10 +63,14 @@ class TypeCheckingVisitor(YAPLVisitor):
             current_class = self.inheritance_info.get(current_class)
         return None
 
-    
+
     def setFeature(self, feature:YAPLParser.FeatureContext, class_name):
         if feature.getChild(1).getText() == "(": # method
             method_name = feature.id_().getText()
+            if method_name in self.RESERVED_WORDS:
+                print(f"El nombre del método {method_name} es una palabra reservada (línea {feature.start.line})")
+                self.found_errors = True
+                return
             method_type = feature.TYPE_ID().getText()
             params = {}
             for param in feature.formal():
@@ -79,7 +85,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                 return
 
             # Verifica si el metodo ya ha sido definido en una superclase
-            existing_method = self.method_exists_in_class_or_superclasses(method_name, class_name)
+            existing_method = self.methodInSuperclass(method_name, class_name)
             if existing_method:
                 # Verifica si el tipo de retorno y los parametros coinciden
                 if existing_method.return_type != method_type or existing_method.params != params:
@@ -88,6 +94,20 @@ class TypeCheckingVisitor(YAPLVisitor):
                     return
 
             self.classes[class_name].methods[method_name] = Method(method_type, params)
+        
+        else: # attribute
+            attribute_name = feature.id_().getText()
+            if attribute_name in self.RESERVED_WORDS:
+                print(f"El nombre del atributo {attribute_name} es una palabra reservada (línea {feature.start.line})")
+                self.found_errors = True
+                return
+            attribute_type = feature.TYPE_ID().getText()
+            if attribute_name in self.classes[class_name].attributes:
+                print(f"El atributo {attribute_name} ya ha sido definido en la clase {class_name} (línea {feature.start.line})")
+                self.found_errors = True
+                return
+            self.classes[class_name].attributes[attribute_name] = attribute_type
+
 
     def visitClass_prod(self, ctx:YAPLParser.Class_prodContext):
         self.current_class = ctx.TYPE_ID(0).getText()
