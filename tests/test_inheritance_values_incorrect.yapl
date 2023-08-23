@@ -1,0 +1,18 @@
+class Main {
+    main(): Int {
+        0
+    };
+};
+
+class A {
+    method1(a: Int, b: Bool): Int {
+        0
+    };
+};
+
+class B inherits A {
+    method1(a: Int): Int {
+        1
+    };
+};
+

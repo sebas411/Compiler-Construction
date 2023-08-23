@@ -17,6 +17,7 @@ class TypeCheckingVisitor(YAPLVisitor):
         self.inheritance_info = {}
         self.active_lets = []
         self.last_let = 0
+        self.found_errors = False
 
         # Agregar las clases especiales
         self.classes['IO'] = ClassObj('IO')
@@ -37,6 +38,9 @@ class TypeCheckingVisitor(YAPLVisitor):
     def setClasses(self, source:YAPLParser.SourceContext):
         for class_ in source.class_prod():
             class_name = class_.getChild(1).getText()
+            if class_name in self.classes:
+                print(f"La clase {class_name} ya ha sido definida (línea {class_.start.line})")
+                return
             self.classes[class_name] = ClassObj(class_name)
             if class_.INHERITS():
                 inherited_class = class_.TYPE_ID(1).getText()
@@ -49,7 +53,15 @@ class TypeCheckingVisitor(YAPLVisitor):
             for feature in class_.feature():
                 self.setFeature(feature, class_name)
     
+    def method_exists_in_class_or_superclasses(self, method_name, class_name):
+        current_class = class_name
+        while current_class is not None:
+            if method_name in self.classes[current_class].methods:
+                return self.classes[current_class].methods[method_name]
+            current_class = self.inheritance_info.get(current_class)
+        return None
 
+    
     def setFeature(self, feature:YAPLParser.FeatureContext, class_name):
         if feature.getChild(1).getText() == "(": # method
             method_name = feature.id_().getText()
@@ -59,14 +71,23 @@ class TypeCheckingVisitor(YAPLVisitor):
                 param_type = param.TYPE_ID().getText()
                 param_name = param.id_().getText()
                 params[param_name] = param_type
+
+            # Verifica si el metodo ya ha sido definido en la clase actual
+            if method_name in self.classes[class_name].methods and not self.classes[class_name].is_inherited_method(method_name):
+                print(f"El método {method_name} ya ha sido definido en la clase {class_name} (línea {feature.start.line})")
+                self.found_errors = True
+                return
+
+            # Verifica si el metodo ya ha sido definido en una superclase
+            existing_method = self.method_exists_in_class_or_superclasses(method_name, class_name)
+            if existing_method:
+                # Verifica si el tipo de retorno y los parametros coinciden
+                if existing_method.return_type != method_type or existing_method.params != params:
+                    print(f"El método {method_name} ya ha sido definido en una superclase de {class_name} con un tipo de retorno o parámetros diferentes (línea {feature.start.line})")
+                    self.found_errors = True
+                    return
+
             self.classes[class_name].methods[method_name] = Method(method_type, params)
-
-        else: # attribute
-            attribute_name = feature.id_().getText()
-            attribute_type = feature.TYPE_ID().getText()
-            self.classes[class_name].attributes[attribute_name] = attribute_type
-
-
 
     def visitClass_prod(self, ctx:YAPLParser.Class_prodContext):
         self.current_class = ctx.TYPE_ID(0).getText()
