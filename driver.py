@@ -22,20 +22,26 @@ class TypeCheckingVisitor(YAPLVisitor):
         # Agregar las clases especiales
         self.classes['IO'] = ClassObj('IO')
         self.classes['IO'].methods['in_int'] = Method('Int', {})
-        self.classes['IO'].methods['in_bool'] = Method('Bool', {})
-        self.classes['IO'].methods['out_int'] = Method('IO', {'x': 'Int'})
-        self.classes['IO'].methods['out_bool'] = Method('IO', {'x': 'Bool'})
+        self.classes['IO'].methods['in_string'] = Method('String', {})
+        self.classes['IO'].methods['out_int'] = Method('SELF_TYPE', {'x': 'Int'})
+        self.classes['IO'].methods['out_string'] = Method('SELF_TYPE', {'x': 'String'})
 
         self.classes['Int'] = ClassObj('Int')
-        # Agregar métodos predefinidos para Int si los hay
 
         self.classes['String'] = ClassObj('String')
-        # Agregar métodos predefinidos para String si los hay
+        self.classes['String'].methods['length'] = Method('Int', {})
+        self.classes['String'].methods['concat'] = Method('String', {'s': 'String'})
+        self.classes['String'].methods['substr'] = Method('String', {'i': 'Int', 'l': int})
 
         self.classes['Bool'] = ClassObj('Bool')
-        # Agregar métodos predefinidos para Bool si los hay
 
         self.RESERVED_WORDS = {"class", "else", "fi", "if", "in", "inherits", "isvoid", "loop", "pool", "then", "while", "new", "not", "false", "true"}
+        
+        self.classes['Object'] = ClassObj('Object')
+        self.classes['Object'].methods['abort'] = Method('Object', {})
+        self.classes['Object'].methods['type_name'] = Method('String', {})
+        self.classes['Object'].methods['copy'] = Method('SELF_TYPE', {})
+        
         
     def setClasses(self, source:YAPLParser.SourceContext):
         for class_ in source.class_prod():
@@ -121,14 +127,17 @@ class TypeCheckingVisitor(YAPLVisitor):
             method_type = ctx.TYPE_ID().getText()
             self.current_method = method_name
             return_type = self.get_expr_type(ctx.expr())
-            print(return_type)
+            if not self.check_casting(return_type, method_type):
+                print(f"Error en el tipo de retorno del método '{method_name}', se esperaba '{method_type}' pero se obtuvo '{return_type}'. (línea {ctx.start.line})")
             self.current_method = None
 
         else: # attribute
             attribute_name = ctx.id_().getText()
             attribute_type = ctx.TYPE_ID().getText()
             if ctx.expr():
-                self.get_expr_type(ctx.expr())
+                assigned_type = self.get_expr_type(ctx.expr())
+                if not self.check_casting(assigned_type, attribute_type):
+                    print(f"Error en asignación de valor para atributo '{attribute_name}', se esperaba '{attribute_type}' pero se obtuvo '{assigned_type}'. (línea {ctx.start.line})")
 
 
     def visitChildren(self, node):
@@ -237,6 +246,8 @@ class TypeCheckingVisitor(YAPLVisitor):
                     foundError = True
                     print(f"Error de tipo para el parámetro '{list(method_params.keys())[i]}'. Se esperaba el tipo '{list(method_params.values())[i]}' pero se obtuvo '{param_types[i]}'. (línea {expr.start.line})")
             if foundError: return "Error"
+            if self.classes[called_class].methods[method_name].return_type == "SELF_TYPE":
+                return called_class
             return self.classes[called_class].methods[method_name].return_type
         elif expr.getChildCount() == 5 and expr.getChild(0).getSymbol().type == YAPLParser.WHILE: # While
             conditional_type = self.get_expr_type(expr.getChild(1))
@@ -264,6 +275,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                     foundError = True
                     print(f"Error de tipo para el parámetro '{list(method_params.keys())[i]}'. Se esperaba el tipo '{list(method_params.values())[i]}' pero se obtuvo '{param_types[i]}'. (línea {expr.start.line})")
             if foundError: return "Error"
+            if self.classes[self.current_class].methods[method_name].return_type == "SELF_TYPE": return self.current_class
             return self.classes[self.current_class].methods[method_name].return_type
         elif expr.getChildCount() == 3 and expr.getChild(1).getText() == "<-": # assign
             return self.visitAssign(expr)
@@ -316,7 +328,7 @@ class TypeCheckingVisitor(YAPLVisitor):
             elif expr.getChild(0).getSymbol().type in [YAPLParser.TRUE, YAPLParser.FALSE]: #bool
                 return 'Bool'
             elif expr.getText() == "self": # self
-                return self.current_class
+                return 'SELF_TYPE'
             return "Error"
         return 'Error'
 
@@ -328,7 +340,7 @@ class TypeCheckingVisitor(YAPLVisitor):
         id_type = self.classes[self.current_class].get_attribute_type(self.current_method, self.active_lets, id_name)
         expr_type = self.get_expr_type(ctx.expr(0))
 
-        if id_type != expr_type:
+        if not self.check_casting(expr_type, id_type):
             print(f"Error de tipo se esperaba '{id_type}' pero se obtuvo '{expr_type}' (linea {ctx.start.line})")
             return "Error"
         return id_type
@@ -346,13 +358,6 @@ class TypeCheckingVisitor(YAPLVisitor):
             print("Error: La clase 'Main' no tiene un método 'main'.")
             return
 
-        # Verificar que el tipo de retorno del método 'main' es 'Int'
-        main_method_type = main_class_methods['main'].return_type
-        if main_method_type != 'Int':
-            print(f"Error: El método 'main' en la clase 'Main' tiene un tipo de retorno incorrecto: '{main_method_type}'. Se esperaba 'Int'.")
-            return
-
-        print("La clase 'Main' es válida.")
 
 
     def verify_inheritance_rules(self):
@@ -370,24 +375,18 @@ class TypeCheckingVisitor(YAPLVisitor):
         #print(f"Reglas de herencia: {self.inheritance_info}")
         #print(f"Tabla de clases: {self.classes}")
 
-        # Verificar que la clase Main no hereda de ninguna otra clase.
-        if self.inheritance_info.get('Main'):
-            print("Error: La clase 'Main' no puede heredar de ninguna otra clase.")
-            return
 
         # Verificar que las clases de tipos básicos no son superclases.
         basic_types = ['Int', 'String', 'Bool']
         for basic_type in basic_types:
             if basic_type in self.inheritance_info.values():
-                print(f"Error: La clase '{basic_type}' no puede ser una superclase.")
+                print(f"Error: La clase '{basic_type}' no puede ser heredada.")
                 return
 
         # Verificar herencia recursiva.
         for cls in self.inheritance_info:
             if check_recursive_inheritance(cls):
                 return
-
-        print("Las reglas de herencia son válidas.")
 
     def check_default_values(self, variable_name, variable_type):
         default_values = {
@@ -407,6 +406,8 @@ class TypeCheckingVisitor(YAPLVisitor):
 
 
     def check_casting(self, expr_type, expected_type):
+        if expected_type == "Object" and expr_type != "Error":
+            return True
         if expr_type == expected_type:
             return True
 
@@ -417,6 +418,16 @@ class TypeCheckingVisitor(YAPLVisitor):
         if expr_type == 'Bool' and expected_type == 'Int':
             # Bool a Int: False es 0, True es 1.
             return True
+        
+        child_class = expr_type
+        while True:
+            if child_class in self.inheritance_info:
+                parent_class = self.inheritance_info[child_class]
+                if parent_class == expected_type:
+                    return True
+                child_class = parent_class
+            else:
+                break
 
         return False
 
@@ -459,7 +470,7 @@ def main(argv):
     visitor.verify_main_class()
     visitor.verify_inheritance_rules()
 
-    if parser.getNumberOfSyntaxErrors() == 0 and not visitor.found_errors:
+    if parser.getNumberOfSyntaxErrors() == 0:
         # Generar representación gráfica
         dot = Digraph(comment='Abstract Syntax Tree')
         visualize_tree(tree, dot)
