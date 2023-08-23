@@ -21,7 +21,7 @@ class Main inherits IO {
         while 
           if testee < divisor * divisor 
             then false 		-- can stop if divisor > sqrt(testee).
-	  else if testee - divisor*(testee/divisor) = 0 
+	          else if testee - divisor*(testee/divisor) = 0 
             then false 		-- can stop if divisor divides testee. 
             else true
           fi fi     
@@ -38,15 +38,15 @@ class Main inherits IO {
           }
         else	-- the loop halted on testee/divisor = 0, testee isn't prime.
           0	-- testee isn't prime, do nothing.
-	fi;   	
+	      fi;   	
 
         if stop <= testee then 
           "halt".abort()	-- we could think of "halt" as SIGTERM.
         else 
           "continue"
-        fi;       
-
+        fi;
       } 
-    pool;
-    }
+      pool;
+     }
   };
+};

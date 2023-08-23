@@ -20,27 +20,31 @@ class TypeCheckingVisitor(YAPLVisitor):
         self.found_errors = False
 
         # Agregar las clases especiales
+        self.classes['Object'] = ClassObj('Object')
+        self.classes['Object'].methods['abort'] = Method('Object', {})
+        self.classes['Object'].methods['type_name'] = Method('String', {})
+        self.classes['Object'].methods['copy'] = Method('SELF_TYPE', {})
+        
         self.classes['IO'] = ClassObj('IO')
+        self.classes['IO'].inherit(self.classes['Object'])
         self.classes['IO'].methods['in_int'] = Method('Int', {})
         self.classes['IO'].methods['in_string'] = Method('String', {})
         self.classes['IO'].methods['out_int'] = Method('SELF_TYPE', {'x': 'Int'})
         self.classes['IO'].methods['out_string'] = Method('SELF_TYPE', {'x': 'String'})
 
         self.classes['Int'] = ClassObj('Int')
+        self.classes['Int'].inherit(self.classes['Object'])
 
         self.classes['String'] = ClassObj('String')
+        self.classes['String'].inherit(self.classes['Object'])
         self.classes['String'].methods['length'] = Method('Int', {})
         self.classes['String'].methods['concat'] = Method('String', {'s': 'String'})
-        self.classes['String'].methods['substr'] = Method('String', {'i': 'Int', 'l': int})
+        self.classes['String'].methods['substr'] = Method('String', {'i': 'Int', 'l': 'Int'})
 
         self.classes['Bool'] = ClassObj('Bool')
+        self.classes['Bool'].inherit(self.classes['Object'])
 
         self.RESERVED_WORDS = {"class", "else", "fi", "if", "in", "inherits", "isvoid", "loop", "pool", "then", "while", "new", "not", "false", "true"}
-        
-        self.classes['Object'] = ClassObj('Object')
-        self.classes['Object'].methods['abort'] = Method('Object', {})
-        self.classes['Object'].methods['type_name'] = Method('String', {})
-        self.classes['Object'].methods['copy'] = Method('SELF_TYPE', {})
         
         
     def setClasses(self, source:YAPLParser.SourceContext):
@@ -48,8 +52,10 @@ class TypeCheckingVisitor(YAPLVisitor):
             class_name = class_.getChild(1).getText()
             if class_name in self.classes:
                 print(f"La clase {class_name} ya ha sido definida (línea {class_.start.line})")
-                return
+                self.found_errors = True
+                continue
             self.classes[class_name] = ClassObj(class_name)
+            self.classes[class_name].inherit(self.classes['Object'])
             if class_.INHERITS():
                 inherited_class = class_.TYPE_ID(1).getText()
                 if inherited_class in self.classes:
@@ -57,16 +63,19 @@ class TypeCheckingVisitor(YAPLVisitor):
                     self.inheritance_info[class_name] = inherited_class
                 else:
                     print(f"La clase {inherited_class} no ha sido definida (línea {class_.start.line})")
-                    self.inheritance_info[self.current_class] = None
+                    self.found_errors = True
             for feature in class_.feature():
                 self.setFeature(feature, class_name)
     
-    def methodInSuperclass(self, method_name, class_name):
+    def methodInSuperclass(self, method_name, class_name) -> Method:
         current_class = class_name
-        while current_class is not None:
+        while True:
             if method_name in self.classes[current_class].methods:
                 return self.classes[current_class].methods[method_name]
-            current_class = self.inheritance_info.get(current_class)
+            if current_class in self.inheritance_info:
+                current_class = self.inheritance_info[current_class]
+            else:
+                break
         return None
 
 
@@ -98,6 +107,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                     print(f"El método {method_name} ya ha sido definido en una superclase de {class_name} con un tipo de retorno o parámetros diferentes (línea {feature.start.line})")
                     self.found_errors = True
                     return
+                self.classes[class_name].inherited_methods.discard(method_name)
 
             self.classes[class_name].methods[method_name] = Method(method_type, params)
         
@@ -127,8 +137,9 @@ class TypeCheckingVisitor(YAPLVisitor):
             method_type = ctx.TYPE_ID().getText()
             self.current_method = method_name
             return_type = self.get_expr_type(ctx.expr())
-            if not self.check_casting(return_type, method_type):
+            if not self.check_casting(return_type, method_type, self.current_class):
                 print(f"Error en el tipo de retorno del método '{method_name}', se esperaba '{method_type}' pero se obtuvo '{return_type}'. (línea {ctx.start.line})")
+                self.found_errors = True
             self.current_method = None
 
         else: # attribute
@@ -136,8 +147,9 @@ class TypeCheckingVisitor(YAPLVisitor):
             attribute_type = ctx.TYPE_ID().getText()
             if ctx.expr():
                 assigned_type = self.get_expr_type(ctx.expr())
-                if not self.check_casting(assigned_type, attribute_type):
+                if not self.check_casting(assigned_type, attribute_type, self.current_class):
                     print(f"Error en asignación de valor para atributo '{attribute_name}', se esperaba '{attribute_type}' pero se obtuvo '{assigned_type}'. (línea {ctx.start.line})")
+                    self.found_errors = True
 
 
     def visitChildren(self, node):
@@ -170,6 +182,8 @@ class TypeCheckingVisitor(YAPLVisitor):
             # calculando el supertipo
             if then_type == else_type:
                 return then_type
+            elif then_type == "Object" or else_type == "Object":
+                return "Object"
             elif then_type in self.inheritance_info and else_type in self.inheritance_info:
                 if self.inheritance_info[then_type] == self.inheritance_info[else_type]:
                     return self.inheritance_info[then_type]
@@ -179,8 +193,7 @@ class TypeCheckingVisitor(YAPLVisitor):
             elif else_type in self.inheritance_info:
                 if then_type == self.inheritance_info[else_type]:
                     return then_type
-            print(f"Los tipos de las ramas then y else difieren: {then_type}, {else_type} (línea {expr.start.line})")
-            return "Error"
+            return "Object"
         elif expr.getChildCount() >= 6 and expr.getChild(0).getText() == "let": # let
             self.last_let += 1
             let_name = f"let{self.last_let}"
@@ -242,7 +255,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                 return "Error"
             foundError = False
             for i in range(param_num):
-                if not self.check_casting(list(method_params.values())[i], param_types[i]):
+                if not self.check_casting(list(method_params.values())[i], param_types[i], self.current_class):
                     foundError = True
                     print(f"Error de tipo para el parámetro '{list(method_params.keys())[i]}'. Se esperaba el tipo '{list(method_params.values())[i]}' pero se obtuvo '{param_types[i]}'. (línea {expr.start.line})")
             if foundError: return "Error"
@@ -271,7 +284,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                 return "Error"
             foundError = False
             for i in range(param_num):
-                if not self.check_casting(list(method_params.values())[i], param_types[i]):
+                if not self.check_casting(list(method_params.values())[i], param_types[i], self.current_class):
                     foundError = True
                     print(f"Error de tipo para el parámetro '{list(method_params.keys())[i]}'. Se esperaba el tipo '{list(method_params.values())[i]}' pero se obtuvo '{param_types[i]}'. (línea {expr.start.line})")
             if foundError: return "Error"
@@ -340,7 +353,7 @@ class TypeCheckingVisitor(YAPLVisitor):
         id_type = self.classes[self.current_class].get_attribute_type(self.current_method, self.active_lets, id_name)
         expr_type = self.get_expr_type(ctx.expr(0))
 
-        if not self.check_casting(expr_type, id_type):
+        if not self.check_casting(expr_type, id_type, self.current_class):
             print(f"Error de tipo se esperaba '{id_type}' pero se obtuvo '{expr_type}' (linea {ctx.start.line})")
             return "Error"
         return id_type
@@ -405,9 +418,13 @@ class TypeCheckingVisitor(YAPLVisitor):
                 print(f"Tipo desconocido '{variable_type}' para la variable '{variable_name}'. No se pudo inicializar con un valor por defecto.")
 
 
-    def check_casting(self, expr_type, expected_type):
+    def check_casting(self, expr_type, expected_type, class_name):
         if expected_type == "Object" and expr_type != "Error":
             return True
+        if expected_type == "SELF_TYPE":
+            expected_type = class_name
+        if expr_type == "SELF_TYPE":
+            expr_type = class_name
         if expr_type == expected_type:
             return True
 
@@ -470,7 +487,7 @@ def main(argv):
     visitor.verify_main_class()
     visitor.verify_inheritance_rules()
 
-    if parser.getNumberOfSyntaxErrors() == 0:
+    if parser.getNumberOfSyntaxErrors() == 0 and not visitor.found_errors:
         # Generar representación gráfica
         dot = Digraph(comment='Abstract Syntax Tree')
         visualize_tree(tree, dot)

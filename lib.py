@@ -15,9 +15,9 @@ class ClassObj(object):
         return method_name in self.inherited_methods
     
     def get_attribute_type(self, current_method, active_lets, attribute_name):
-        if current_method and attribute_name in self.methods[current_method].params.keys():
+        if current_method and attribute_name in self.methods[current_method].params:
             return self.methods[current_method].params[attribute_name]
-        if attribute_name in self.attributes.keys():
+        if attribute_name in self.attributes:
             return self.attributes[attribute_name]
         for let_ in active_lets:
             if attribute_name in self.lets[let_]:
@@ -28,8 +28,7 @@ class ClassObj(object):
         for let_ in active_lets:
             if attribute_name in self.lets[let_]:
                 return True
-        return attribute_name in self.methods[current_method].params.keys()\
-            or attribute_name in self.attributes.keys()
+        return attribute_name in self.attributes or (current_method and attribute_name in self.methods[current_method].params)
         
 class Method():
     def __init__(self, return_type, params):
