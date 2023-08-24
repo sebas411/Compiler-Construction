@@ -169,7 +169,8 @@ class TypeCheckingVisitor(YAPLVisitor):
         if expr.getChild(0).getText() == "{": #code block
             code_block_type = None
             for child in expr.expr():
-                code_block_type = self.get_expr_type(child)
+                if code_block_type != "Error":
+                    code_block_type = self.get_expr_type(child)
             return code_block_type
         elif expr.getChildCount() == 7 and expr.getChild(0).getSymbol().type == YAPLParser.IF: # If
             conditional_type = self.get_expr_type(expr.getChild(1))
@@ -297,24 +298,24 @@ class TypeCheckingVisitor(YAPLVisitor):
         elif expr.getChildCount() == 3 and expr.getChild(1).getText() in ['+', '-', '*', '/']: # arith operations
             left_type = self.get_expr_type(expr.getChild(0))
             right_type = self.get_expr_type(expr.getChild(2))
-            if left_type == 'Int' and right_type == 'Int':
+            if self.check_casting(left_type, "Int", self.current_class) and self.check_casting(right_type, "Int", self.current_class):
                 return 'Int'
             print(f'Error de tipos de operandos para {expr.getChild(1).getText()}: "{left_type}" y "{right_type}" (línea {expr.start.line})')
             return "Error"
         elif expr.getChildCount() == 3 and expr.getChild(1).getText() in ['<', '<=', '=']: # comparisons
             left_type = self.get_expr_type(expr.getChild(0))
             right_type = self.get_expr_type(expr.getChild(2))
-            if (left_type == 'Int' and right_type == 'Int') or \
-               (left_type == 'Bool' and right_type == 'Bool') or \
-               (left_type == 'String' and right_type == 'String'):
+            if (self.check_casting(left_type, "Int", self.current_class) and self.check_casting(right_type, "Int", self.current_class)) or \
+               (self.check_casting(left_type, "Bool", self.current_class) and self.check_casting(right_type, "Bool", self.current_class)) or \
+               (self.check_casting(left_type, "String", self.current_class) and self.check_casting(right_type, "String", self.current_class)):
                 return 'Bool'
             print(f'Error de tipos de operandos para {expr.getChild(1).getText()}: "{left_type}" y "{right_type}" (línea {expr.start.line})')
             return "Error"
         elif expr.getChildCount() == 2 and expr.getChild(0).getText() in ['~', '-', 'not']: # unary operators
             expr_type = self.get_expr_type(expr.getChild(1))
-            if expr_type == 'Int' and expr.getChild(0).getText() != 'not':
+            if self.check_casting(expr_type, "Int", self.current_class) and expr.getChild(0).getText() in ['~', '-']:
                 return 'Int'
-            elif expr_type == 'Bool' and expr.getChild(0).getText() in ['~', 'not']:
+            elif self.check_casting(expr_type, "Bool", self.current_class) and expr.getChild(0).getText() in ['not']:
                 return 'Bool'
             print(f'Error de tipo de operando para {expr.getChild(0).getText()}: "{expr_type}" (línea {expr.start.line})')
             return "Error"
