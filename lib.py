@@ -5,6 +5,7 @@ class ClassObj(object):
         self.lets = {}
         self.attributes = {}
         self.inherited_methods = set()
+        self.memory_address = None
     
     def inherit(self, o_class):
         self.methods = o_class.methods.copy()
@@ -34,4 +35,26 @@ class Method():
     def __init__(self, return_type, params):
         self.return_type = return_type
         self.params = params
+        self.label = None
+        self.temporals = {} 
         
+class MIPSInstruction:
+    def __init__(self, opcode, rs, rt, rd, shamt, funct):
+        self.opcode = opcode
+        self.rs = rs
+        self.rt = rt
+        self.rd = rd
+        self.shamt = shamt
+        self.funct = funct
+
+class TemporalManager:
+    def __init__(self):
+        self.available_temporals = [f"$t{i}" for i in range(10)]
+
+    def get_new_temporal(self):
+        if not self.available_temporals:
+            raise Exception("No hay temporales disponibles")
+        return self.available_temporals.pop()
+
+    def recycle_temporal(self, temporal):
+        self.available_temporals.append(temporal)

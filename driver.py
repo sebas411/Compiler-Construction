@@ -9,6 +9,7 @@ from antlr4.tree.Trees import Trees
 from antlr.YAPLVisitor import YAPLVisitor
 from lib import *
 
+
 class TypeCheckingVisitor(YAPLVisitor):
     def __init__(self):
         self.current_class = None
@@ -457,6 +458,13 @@ class MyListener(YAPLListener, ErrorListener):
 
     def visitErrorNode(self, node):
         print(f"Error: nodo no reconocido '{node.getText()}'")
+
+class MIPSCode:
+    def __init__(self):
+        self.instructions = []
+
+    def add_instruction(self, instruction):
+        self.instructions.append(instruction)
 
 def visualize_tree(node, dot):
     if isinstance(node, TerminalNode):
