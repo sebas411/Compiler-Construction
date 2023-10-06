@@ -43,52 +43,112 @@ class IntermediateCodeVisitor(YAPLVisitor):
             result = child.accept(self)
         return result
 
+    
     def genCode(self, ctx: YAPLParser.ExprContext):
+        print(f"Processing genCode for: {ctx.getText()}")
+            
+        # Method Calls
+        if ctx.getChildCount() >= 4 and ctx.getChild(1).getText() == '.':
+                if len(ctx.id_()) > 1:
+                    method_name = ctx.id_()[1].getText()  
+                else:
+                    method_name = ctx.id_()[0].getText()
+                instance = self.genCode(ctx.getChild(0))
+                args = [self.genCode(expr) for expr in ctx.expr()]
+                for arg in args:
+                    self.code.addInstruction('param', arg)
+                self.code.addInstruction('call', method_name, instance)
+                
+        # Conditionals
+        elif ctx.IF():
+                condition = self.genCode(ctx.expr(0))
+                then_code = self.genCode(ctx.expr(1))
+                else_code = self.genCode(ctx.expr(2))
+                self.code.addInstruction('if', condition, then_code, else_code)
+                
+        # Loops
+        elif ctx.WHILE():
+                condition = self.genCode(ctx.expr(0))
+                loop_code = self.genCode(ctx.expr(1))
+                self.code.addInstruction('while', condition, loop_code)
+                
+        # Code Blocks
+        elif ctx.getChild(0).getText() == '{':
+                for child_expr in ctx.expr():
+                    return self.genCode(child_expr)
+                    
+        # New Object Creation
+        elif ctx.NEW():
+                type_name = ctx.TYPE_ID().getText()
+                result = self.new_temp()
+                self.code.addInstruction('new', type_name, result=result)
+                return result
+                
+        # Unary Operations
+        elif ctx.getChildCount() == 2:
+                if ctx.getChild(0).getText() in ['ISVOID', 'NOT', '-', '~']:
+                    op = ctx.getChild(0).getText()
+                    operand = self.genCode(ctx.getChild(1))
+                    result = self.new_temp()
+                    self.code.addInstruction(op, operand, result=result)
+                    return result
+                    
+        # Let Assignments
+        elif ctx.getChild(0).getText() == 'let':
+                assignments = [(id_.getText(), type_id.getText(), self.genCode(expr) if expr else None) 
+                            for id_, type_id, expr in zip(ctx.id_(), ctx.TYPE_ID(), ctx.expr())]
+                for var_name, type_name, value in assignments:
+                    self.code.addInstruction('let', var_name, type_name, value)
+                body = self.genCode(ctx.expr(-1))
+                return body       
 
         # Asignaciones
-        if ctx.getChildCount() == 3 and ctx.getChild(1).getText() == "<-":
-            left_var = ctx.id_()[0].getText()
-            right_val = self.genCode(ctx.expr(0))
-            self.code.addInstruction('=', right_val, result=left_var)
-            return left_var
+        elif ctx.getChildCount() == 3 and ctx.getChild(1).getText() == "<-":
+                left_var = ctx.id_()[0].getText()
+                right_val = self.genCode(ctx.expr(0))
+                self.code.addInstruction('=', right_val, result=left_var)
+                return left_var
 
 
         # Operaciones binarias (+, -, *, /)
         elif ctx.getChildCount() == 3 and ctx.getChild(1).getText() in ['+', '-', '*', '/']:
-            left_expr = self.genCode(ctx.getChild(0))
-            op = ctx.getChild(1).getText()
-            right_expr = self.genCode(ctx.getChild(2))
-            result = self.new_temp()
-            self.code.addInstruction(op, left_expr, right_expr, result)
-            return result
+                left_expr = self.genCode(ctx.getChild(0))
+                op = ctx.getChild(1).getText()
+                right_expr = self.genCode(ctx.getChild(2))
+                result = self.new_temp()
+                self.code.addInstruction(op, left_expr, right_expr, result)
+                return result
 
         # Operaciones binarias (comparaciones: <, <=, =)
         elif ctx.getChildCount() == 3 and ctx.getChild(1).getText() in ['<', '<=', '=']:
-            left_expr = self.genCode(ctx.getChild(0))
-            op = ctx.getChild(1).getText()
-            if op == '=':
-                relop = 'eq'
-            else:
-                relop = op
-            right_expr = self.genCode(ctx.getChild(2))
-            result = self.new_temp()
-            self.code.addInstruction(relop, left_expr, right_expr, result)
-            return result
+                left_expr = self.genCode(ctx.getChild(0))
+                op = ctx.getChild(1).getText()
+                if op == '=':
+                    relop = 'eq'
+                else:
+                    relop = op
+                right_expr = self.genCode(ctx.getChild(2))
+                result = self.new_temp()
+                self.code.addInstruction(relop, left_expr, right_expr, result)
+                return result
 
         # Literales
         elif ctx.getChildCount() == 1:
-            child = ctx.getChild(0)
-            if isinstance(child, YAPLParser.IdContext):
-                return ctx.getText()
-            elif child.getSymbol().type == YAPLParser.INTEGER:
-                return child.getText()
-            elif child.getSymbol().type == YAPLParser.STRING:
-                #TODO
-                return child.getText()
-            elif child.getSymbol().type == YAPLParser.TRUE:
-                return "1"
-            elif child.getSymbol().type == YAPLParser. FALSE:
-                return "0"
+                child = ctx.getChild(0)
+                if isinstance(child, YAPLParser.IdContext):
+                    return ctx.getText()
+                elif child.getSymbol().type == YAPLParser.INTEGER:
+                    return child.getText()
+                elif child.getSymbol().type == YAPLParser.STRING:
+                    #TODO
+                    return child.getText()
+                elif child.getSymbol().type == YAPLParser.TRUE:
+                    return "1"
+                elif child.getSymbol().type == YAPLParser. FALSE:
+                    return "0"
+
+
+        return None
 
         # LLamadas de función y método
         # elif ctx.getChildCount() >= 3 and ctx.getChild(1).getText() == ".":
@@ -152,5 +212,3 @@ class IntermediateCodeVisitor(YAPLVisitor):
         #     result = self.new_temp()
         #     self.code.append(('ACCESS', obj, method_or_attr, result))
         #     return result
-
-        return None

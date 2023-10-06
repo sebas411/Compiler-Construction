@@ -63,7 +63,7 @@ def main(argv):
 
         # Generar representación textual
         textual_representation = Trees.toStringTree(tree, None, parser)
-        #print(textual_representation)
+        print(textual_representation)
         intermediateGenerator = IntermediateCodeVisitor()
         intermediateGenerator.setTable(table)
         intermediateGenerator.visit(tree)
