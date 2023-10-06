@@ -8,6 +8,7 @@ from graphviz import Digraph
 from antlr4.tree.Trees import Trees
 from lib import *
 from semantic import TypeCheckingVisitor
+from intermediate import IntermediateCodeVisitor
 
 class MyListener(YAPLListener, ErrorListener):
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
@@ -52,7 +53,8 @@ def main(argv):
     semanticVisitor.visit(tree)
     semanticVisitor.verify_main_class()
     semanticVisitor.verify_inheritance_rules()
-    
+    table = semanticVisitor.getTable()
+
     if parser.getNumberOfSyntaxErrors() == 0 and not semanticVisitor.found_errors:
         # Generar representación gráfica
         dot = Digraph(comment='Abstract Syntax Tree')
@@ -62,6 +64,11 @@ def main(argv):
         # Generar representación textual
         textual_representation = Trees.toStringTree(tree, None, parser)
         #print(textual_representation)
+        intermediateGenerator = IntermediateCodeVisitor()
+        intermediateGenerator.setTable(table)
+        intermediateGenerator.visit(tree)
+        generated_code = intermediateGenerator.getCode()
+        print(generated_code.printable())
         print("Código compilado exitosamente")
     else:
         print(semanticVisitor.getOutput())

@@ -38,23 +38,40 @@ class Method():
         self.label = None
         self.temporals = {} 
         
-class MIPSInstruction:
-    def __init__(self, opcode, rs, rt, rd, shamt, funct):
-        self.opcode = opcode
-        self.rs = rs
-        self.rt = rt
-        self.rd = rd
-        self.shamt = shamt
-        self.funct = funct
+class IntermediateInstruction():
+    def __init__(self, op, arg1, arg2, result):
+        self.op = op
+        self.arg1 = arg1
+        self.arg2 = arg2
+        self.result = result
+        
+class IntermediateCode():
+    def __init__(self):
+        self.code = []
+    def addInstruction(self, op, arg1, arg2=None, result=None):
+        self.code.append(IntermediateInstruction(op, arg1, arg2, result))
+    def printable(self):
+        pcode = ""
+        for instruction in self.code:
+            if instruction.op == '=':
+                pcode+=f"{instruction.result} = {instruction.arg1}"
+            elif instruction.op in ['+', '-', '/', '*', 'eq', '<', '<=']:
+                pcode+=f"{instruction.result} = {instruction.arg1} {instruction.op} {instruction.arg2}"
+            pcode+="\n"
+        return pcode
+
 
 class TemporalManager:
     def __init__(self):
-        self.available_temporals = [f"$t{i}" for i in range(10)]
+        self.temporals = []
+        self.maxTemp = 0
 
     def get_new_temporal(self):
-        if not self.available_temporals:
-            raise Exception("No hay temporales disponibles")
-        return self.available_temporals.pop()
+        self.maxTemp += 1
+        newTemp = f"T{self.maxTemp}"
+        self.temporals.append(newTemp)
+        return newTemp
+    
 
     def recycle_temporal(self, temporal):
         self.available_temporals.append(temporal)
