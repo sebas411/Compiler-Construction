@@ -169,7 +169,11 @@ class TypeCheckingVisitor(YAPLVisitor):
                     result.append(childResult)
         return result
 
-    def get_expr_type(self, expr: YAPLParser.ExprContext):
+    def get_expr_type(self, expr: YAPLParser.ExprContext, extdata=None):
+        if extdata:
+            self.current_class = extdata["current_class"]
+            self.current_method = extdata["current_method"]
+            self.active_lets = extdata["active_lets"]
         if expr.getChild(0).getText() == "{": #code block
             code_block_type = None
             for child in expr.expr():
