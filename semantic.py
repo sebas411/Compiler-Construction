@@ -107,7 +107,7 @@ class TypeCheckingVisitor(YAPLVisitor):
             existing_method = self.methodInSuperclass(method_name, class_name)
             if existing_method:
                 # Verifica si el tipo de retorno y los parametros coinciden
-                if existing_method.return_type != method_type or existing_method.params != params:
+                if existing_method.return_type != method_type or existing_method.get_params() != params:
                     self.log(f"El método {method_name} ya ha sido definido en una superclase de {class_name} con un tipo de retorno o parámetros diferentes (línea {feature.start.line})")
                     self.found_errors = True
                     return
@@ -126,7 +126,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                 self.log(f"El atributo {attribute_name} ya ha sido definido en la clase {class_name} (línea {feature.start.line})")
                 self.found_errors = True
                 return
-            self.classes[class_name].attributes[attribute_name] = attribute_type
+            self.classes[class_name].add_attribute(attribute_name, attribute_type)
 
 
     def visitClass_prod(self, ctx:YAPLParser.Class_prodContext):
@@ -206,22 +206,29 @@ class TypeCheckingVisitor(YAPLVisitor):
         elif expr.getChildCount() >= 6 and expr.getChild(0).getText() == "let": # let
             self.last_let += 1
             let_name = f"let{self.last_let}"
-            num_of_params = len(expr.id_())
-            params = {}
-            for i in range(num_of_params):
-                if expr.id_(i).getText() not in params:
-                    params[expr.id_(i).getText()] = expr.TYPE_ID(i).getText()
-                else:
-                    self.log(f"Variable local '{expr.id_(i).getText()}' definida múltiples veces (línea {expr.start.line})")
-                    return "Error"
 
-            for param in params.keys():
-                if self.classes[self.current_class].has_attribute(self.current_method, self.active_lets, param):
-                    self.log(f"Variable local '{param}' definida previamente (línea {expr.start.line})")
+            att_names = []
+            att_types = []
+            curr_check = 1
+            while True:
+                att_name = expr.getChild(curr_check).getText()
+                if att_name in att_names or self.classes[self.current_class].has_attribute(self.current_method, self.active_lets, att_name):
+                    self.log(f"Variable local '{att_name}' definida previamente (línea {expr.start.line})")
                     return "Error"
-            for i in range(len(expr.expr())-1):
-                self.get_expr_type(expr.expr(i))
-            self.classes[self.current_class].lets[let_name] = params
+                att_type = expr.getChild(curr_check + 2).getText()
+                att_names.append(att_name)
+                att_types.append(att_type)
+                if expr.getChild(curr_check + 3).getText() == "<-":
+                    eval_type = self.get_expr_type(expr.getChild(curr_check + 4))
+                    if not self.check_casting(eval_type, att_type, self.current_class):
+                        self.log(f"Error de tipo se esperaba '{att_type}' pero se obtuvo '{eval_type}' (linea {expr.start.line})")
+                        return "Error"
+                    curr_check += 6
+                else:
+                    curr_check += 4
+                if expr.getChild(curr_check - 1).getText() != ",":
+                    break
+            self.classes[self.current_class].methods[self.current_method].add_let(let_name, att_names, att_types)
             self.active_lets.append(let_name)
             let_type = self.get_expr_type(expr.expr()[-1])
             self.active_lets.pop()
@@ -256,7 +263,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                 self.log(f"El método {method_name} no ha sido declarado en la clase {called_class}. (línea {expr.start.line})")
                 return "Error"
             param_types = [self.get_expr_type(param) for param in expr.expr()[1:]]
-            method_params = self.classes[called_class].methods[method_name].params
+            method_params = self.classes[called_class].methods[method_name].get_params()
             method_param_num = len(method_params)
             param_num = len(param_types)
             if param_num != method_param_num:
@@ -285,7 +292,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                 self.log(f"El método {method_name} no ha sido declarado. (línea {expr.start.line})")
                 return "Error"
             param_types = [self.get_expr_type(param) for param in expr.expr()]
-            method_params = self.classes[self.current_class].methods[method_name].params
+            method_params = self.classes[self.current_class].methods[method_name].get_params()
             method_param_num = len(method_params)
             param_num = len(param_types)
             if param_num != method_param_num:

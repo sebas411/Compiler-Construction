@@ -12,8 +12,12 @@ class IntermediateCodeVisitor(YAPLVisitor):
         self.classes = {}
         self.typechecker = typechecker
         self.active_lets = []
-        
-        self.code.addInstruction("goto", result="Main.main")
+        self.last_let = 0
+        t1 = self.new_temp()
+        self.code.addInstruction("new", "Main", result=t1)
+        self.code.addInstruction("call", "Main.Init", 0, result=t1)
+        t2 = self.new_temp()
+        self.code.addInstruction("call", "Main.main", "0", result=t2)
 
     def getExtData(self):
         data = {
@@ -25,6 +29,9 @@ class IntermediateCodeVisitor(YAPLVisitor):
 
     def getCode(self):
         return self.code
+    
+    def getPointer(self):
+        return self.temp_manager.get_pointer()
 
     def setTable(self, table):
         self.classes = table
@@ -45,7 +52,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 methods.append(feature)
             else:
                 attributes.append(feature)
-        init_label = self.code.new_label(f"{self.current_class}.init")
+        init_label = self.code.new_label(f"{self.current_class}.Init")
         self.code.set_label(init_label)
         for attribute in attributes:
             self.visitAttribute(attribute)
@@ -56,20 +63,27 @@ class IntermediateCodeVisitor(YAPLVisitor):
 
     def visitMethod(self, ctx:YAPLParser.FeatureContext):
         self.current_method = ctx.id_().getText()
-        # self.code.append(('METHOD_START', self.current_class, self.current_method))
         l = self.code.new_label(f"{self.current_class}.{self.current_method}")
         self.code.set_label(l)
         res = self.genCode(ctx.expr())
         self.code.addInstruction("return", res)
         self.free_temp(res)
-        # print(f"res: {res}")
-        # print(self.classes['Main'].methods['main'].params)
-        # self.code.append(('METHOD_END', self.current_class, self.current_method))
+        if self.current_class == "Main" and self.current_method == "main":
+            self.code.addInstruction("HALT")
         self.current_method = None
+
     def visitAttribute(self, ctx:YAPLParser.FeatureContext):
+        att_name = f"{self.current_class}.{ctx.getChild(0).getText()}"
         if ctx.expr():
             code = self.genCode(ctx.expr())
-            self.code.addInstruction("=", code, result=f"{self.current_class}.{ctx.getChild(0).getText()}")
+            self.code.addInstruction("=", code, result=att_name)
+        else:
+            att_type = self.classes[self.current_class].get_attribute_type(self.current_method, self.active_lets, ctx.getChild(0).getText())
+            if att_type in ["Int", "Bool"]:
+                self.code.addInstruction("=", "0", result=att_name)
+            elif att_type == "String":
+                self.code.addInstruction("=", '""', result=att_name)
+
 
     def visitChildren(self, node):
         result = None
@@ -86,7 +100,6 @@ class IntermediateCodeVisitor(YAPLVisitor):
             self.code.addInstruction('=', right_val, result=left_var)
             self.free_temp(right_val)
             return left_var
-
 
         # Operaciones binarias (+, -, *, /)
         elif ctx.getChildCount() == 3 and ctx.getChild(1).getText() in ['+', '-', '*', '/']:
@@ -128,10 +141,13 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 return "1"
             elif child.getSymbol().type == YAPLParser. FALSE:
                 return "0"
+            elif ctx.getText() == "self":
+                return "IP"
 
         # LLamadas de función y método
         elif ctx.getChildCount() >= 5 and (ctx.getChild(1).getText() == "." or ctx.getChild(3).getText() == "."):
-            if ctx.getChild(1) == "@":
+            instance = self.genCode(ctx.getChild(0))
+            if ctx.getChild(1).getText() == "@":
                 className = ctx.getChild(2).getText()
                 methodName = ctx.getChild(4).getText()
             else:
@@ -177,7 +193,6 @@ class IntermediateCodeVisitor(YAPLVisitor):
             self.code.set_label(label_next)
             return result
 
-            
         # Ciclos
         elif ctx.getChildCount() == 5 and ctx.getChild(0).getSymbol().type == YAPLParser.WHILE: # While
             label_begin = self.code.new_label()
@@ -210,15 +225,52 @@ class IntermediateCodeVisitor(YAPLVisitor):
         # Operaciones unarias
         elif ctx.getChildCount() == 2 and ctx.getChild(0).getText() in ['~', '-', 'not']:
             result = self.new_temp()
-            operand = self.visit(ctx.expr(0))
+            operand = self.genCode(ctx.expr(0))
             op = ctx.getChild(0).getText()
             if op == '~':
-                self.code.append(('NOT', operand, None, result))
+                self.code.addInstruction("not", operand, result=result)
             elif op == '-':
-                self.code.append(('NEG', operand, None, result))
+                self.code.addInstruction("minus", operand, result=result)
             elif op == 'not':
-                self.code.append(('LOGICAL_NOT', operand, None, result))
+                self.code.addInstruction("lnot", operand, result=result)
+            return result
+        
+        elif ctx.getChildCount() == 3 and ctx.getChild(0).getText() == "(": # parentheses
+            return self.genCode(ctx.getChild(1))
+        
+        elif ctx.getChildCount() >= 6 and ctx.getChild(0).getText() == "let": # let
+            self.last_let += 1
+            let_name = f"let{self.last_let}"
+
+            att_names = []
+            att_types = []
+            curr_check = 1
+            while True:
+                att_name = ctx.getChild(curr_check).getText()
+                att_type = ctx.getChild(curr_check + 2).getText()
+                att_names.append(att_name)
+                att_types.append(att_type)
+                if ctx.getChild(curr_check + 3).getText() == "<-":
+                    assign = self.genCode(ctx.getChild(curr_check + 4))
+                    self.code.addInstruction("=", assign, result=f"{self.current_class}.{att_name}")
+                    curr_check += 6
+                else:
+                    if att_type in ["Int", "Bool"]:
+                        self.code.addInstruction("=", "0", result=f"{self.current_class}.{att_name}")
+                    elif att_type == "String":
+                        self.code.addInstruction("=", '""', result=f"{self.current_class}.{att_name}")
+                    curr_check += 4
+                if ctx.getChild(curr_check - 1).getText() != ",":
+                    break
+            self.active_lets.append(let_name)
+            result = self.genCode(ctx.expr()[-1])
+            self.active_lets.pop()
             return result
 
+        elif ctx.getChildCount() == 2 and ctx.getChild(0).getSymbol().type == YAPLParser.NEW: # new
+            pointer = self.getPointer()
+            self.code.addInstruction("new", ctx.TYPE_ID(0).getText(), result=pointer)
+            self.code.addInstruction("call", f"{ctx.TYPE_ID(0).getText()}.Init", 0, result=pointer)
+            return pointer
 
         return None

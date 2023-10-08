@@ -2,10 +2,10 @@ class ClassObj(object):
     def __init__(self, name):
         self.name = name
         self.methods = {}
-        self.lets = {}
         self.attributes = {}
         self.inherited_methods = set()
         self.memory_address = None
+        self.size = 0
     
     def inherit(self, o_class):
         self.methods = o_class.methods.copy()
@@ -15,29 +15,91 @@ class ClassObj(object):
     def is_inherited_method(self, method_name):
         return method_name in self.inherited_methods
     
+    def add_attribute(self, name, type):
+        new_att = Attribute(type)
+        if type == "Int":
+            att_size = 4
+        elif type == "Bool":
+            att_size = 4
+        else: #punteros
+            att_size = 4
+        new_att.size = att_size
+        new_att.offset = self.size
+        self.size+= att_size
+        self.attributes[name] = new_att
+        
+    
     def get_attribute_type(self, current_method, active_lets, attribute_name):
-        if current_method and attribute_name in self.methods[current_method].params:
-            return self.methods[current_method].params[attribute_name]
         if attribute_name in self.attributes:
-            return self.attributes[attribute_name]
-        for let_ in active_lets:
-            if attribute_name in self.lets[let_]:
-                return self.lets[let_][attribute_name]
+            return self.attributes[attribute_name].type
+        if current_method:
+            return self.methods[current_method].get_attribute_type(attribute_name, active_lets)
         return "Error"
     
     def has_attribute(self, current_method, active_lets, attribute_name):
-        for let_ in active_lets:
-            if attribute_name in self.lets[let_]:
-                return True
-        return attribute_name in self.attributes or (current_method and attribute_name in self.methods[current_method].params)
+        return attribute_name in self.attributes or (current_method and self.methods[current_method].has_attribute(attribute_name, active_lets))
         
 
 class Method():
     def __init__(self, return_type, params):
         self.return_type = return_type
-        self.params = params
+        self.params = {}
+        self.max_off = 0
+        self.add_params(list(params.keys()), list(params.values()))
         self.label = None
-        self.temporals = {} 
+        self.lets = {}
+        self.temporals = {}
+
+    def add_params(self, attrs, types):
+        for i in range(len(attrs)):
+            new_att = Attribute(types[i])
+            if types[i] == "Int":
+                att_size = 4
+            elif types[i] == "Bool":
+                att_size = 4
+            else: #punteros
+                att_size = 4
+            new_att.size = att_size
+            new_att.offset = self.max_off
+            self.max_off += att_size
+            self.params[attrs[i]] = new_att
+
+    def add_let(self, let_name, attrs, types):
+        let = {}
+        for i in range(len(attrs)):
+            new_att = Attribute(types[i])
+            if types[i] == "Int":
+                att_size = 4
+            elif types[i] == "Bool":
+                att_size = 4
+            else: #punteros
+                att_size = 4
+            new_att.size = att_size
+            new_att.offset = self.max_off
+            self.max_off += att_size
+            let[attrs[i]] = new_att
+        self.lets[let_name] = let
+    
+    def get_params(self):
+        params = {}
+        for param in self.params:
+            params[param] = self.params[param].type
+        return params
+
+    def get_attribute_type(self, att_name, active_lets):
+        if att_name in self.params:
+            return self.params[att_name].type
+        for _let in active_lets:
+            if att_name in self.lets[_let]:
+                return self.lets[_let][att_name].type
+        return "Error"
+        
+
+    def has_attribute(self, att_name, active_lets):
+        for let_ in active_lets:
+            if att_name in self.lets[let_]:
+                return True
+        return att_name in self.params
 
 
 class Attribute():
@@ -62,6 +124,12 @@ class Label():
     
     def set_line(self, line):
         self.line = line
+
+    def __str__(self) -> str:
+        return f"{self.name}: {self.line}"
+    
+    def __repr__(self) -> str:
+        return str(self)
         
 
 class IntermediateCode():
@@ -95,7 +163,7 @@ class IntermediateCode():
             elif instruction.op == "param":
                 pcode+=f"param {instruction.arg1}"
             elif instruction.op == "return":
-                pcode+=f"return {instruction.arg1}"
+                pcode+=f"return {instruction.arg1 or ''}"
             elif instruction.op == "call":
                 pcode+=f"{instruction.result} = call {instruction.arg1},{instruction.arg2}"
             elif instruction.op == "if":
@@ -104,6 +172,16 @@ class IntermediateCode():
                 pcode+=f"ifFalse {instruction.arg1} goto {instruction.result}"
             elif instruction.op == "goto":
                 pcode+=f"goto {instruction.result}"
+            elif instruction.op == "new":
+                pcode+=f"{instruction.result} = new {instruction.arg1}"
+            elif instruction.op == "HALT":
+                pcode+="HALT"
+            elif instruction.op == "not":
+                pcode+=f"{instruction.result} = not {instruction.arg1}"
+            elif instruction.op == "lnot":
+                pcode+=f"{instruction.result} = lnot {instruction.arg1}"
+            elif instruction.op == "minus":
+                pcode+=f"{instruction.result} = minus {instruction.arg1}"
             pcode+="\n"
             c += 1
         return pcode
@@ -124,15 +202,15 @@ class IntermediateCode():
 
         if not self.has_label(name):
             n_label = Label(name)
-            self.labels.append(n_label)
+            # self.labels.append(n_label)
             return n_label
         return "Error"
     
 
-    def set_label(self, label):
-        l_label = self.has_label(label.name)
+    def set_label(self, l_label):
         if l_label:
             l_label.set_line(self.current_line)
+            self.labels.append(l_label)
             return l_label
         return "Error"
 
@@ -140,7 +218,9 @@ class IntermediateCode():
 class TemporalManager:
     def __init__(self):
         self.temporals = []
+        self.pointers = []
         self.maxTemp = 0
+        self.maxPointer = 0
         self.available_temporals = []
 
     def get_new_temporal(self):
@@ -152,6 +232,11 @@ class TemporalManager:
             self.temporals.append(temporal)
         return temporal
     
+    def get_pointer(self):
+        self.maxPointer += 1
+        pointer = f"P{self.maxPointer}"
+        self.pointers.append(pointer)
+        return pointer
 
     def free_temporal(self, temporal):
         if temporal not in self.temporals: return
