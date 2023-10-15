@@ -95,7 +95,9 @@ class IntermediateCodeVisitor(YAPLVisitor):
 
         # Asignaciones
         if ctx.getChildCount() == 3 and ctx.getChild(1).getText() == "<-":
-            left_var = f"{self.current_class}.{ctx.id_()[0].getText()}"
+            attribute = self.classes[self.current_class].get_attribute(self.current_method, self.active_lets, ctx.id_()[0].getText())
+            offset = attribute.offset
+            left_var = f"SP[{offset}]"
             right_val = self.genCode(ctx.expr(0))
             self.code.addInstruction('=', right_val, result=left_var)
             self.free_temp(right_val)
@@ -131,7 +133,10 @@ class IntermediateCodeVisitor(YAPLVisitor):
         elif ctx.getChildCount() == 1:
             child = ctx.getChild(0)
             if isinstance(child, YAPLParser.IdContext):
-                return f"{self.current_class}.{ctx.getText()}"
+                attribute = self.classes[self.current_class].get_attribute(self.current_method, self.active_lets, ctx.getText())
+                offset = attribute.offset
+                left_var = f"SP[{offset}]"
+                return left_var
             elif child.getSymbol().type == YAPLParser.INTEGER:
                 return child.getText()
             elif child.getSymbol().type == YAPLParser.STRING:

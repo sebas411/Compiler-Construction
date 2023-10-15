@@ -36,6 +36,13 @@ class ClassObj(object):
             return self.methods[current_method].get_attribute_type(attribute_name, active_lets)
         return "Error"
     
+    def get_attribute(self, current_method, active_lets, attribute_name):
+        if attribute_name in self.attributes:
+            return self.attributes[attribute_name]
+        if current_method:
+            return self.methods[current_method].get_attribute(attribute_name, active_lets)
+        return "Error"
+    
     def has_attribute(self, current_method, active_lets, attribute_name):
         return attribute_name in self.attributes or (current_method and self.methods[current_method].has_attribute(attribute_name, active_lets))
         
@@ -92,6 +99,14 @@ class Method():
         for _let in active_lets:
             if att_name in self.lets[_let]:
                 return self.lets[_let][att_name].type
+        return "Error"
+    
+    def get_attribute(self, att_name, active_lets):
+        if att_name in self.params:
+            return self.params[att_name]
+        for _let in active_lets:
+            if att_name in self.lets[_let]:
+                return self.lets[_let][att_name]
         return "Error"
         
 
