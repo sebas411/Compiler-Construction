@@ -9,6 +9,7 @@ from antlr4.tree.Trees import Trees
 from lib import *
 from semantic import TypeCheckingVisitor
 from intermediate import IntermediateCodeVisitor
+from mipsTranslator import *
 
 class MyListener(YAPLListener, ErrorListener):
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
@@ -68,7 +69,12 @@ def main(argv):
         intermediateGenerator.setTable(table)
         intermediateGenerator.visit(tree)
         generated_code = intermediateGenerator.getCode()
+        print("CÓDIGO INTERMEDIO")
         print(generated_code.printable())
+        mipsTranslator = MIPSTranslator(generated_code.printable())
+        mipsTranslator.translate()
+        print("CÓDIGO MIPS")
+        print(mipsTranslator.mipsCode)
         print("Código compilado exitosamente")
     else:
         print(semanticVisitor.getOutput())
