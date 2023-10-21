@@ -71,11 +71,13 @@ def main(argv):
         generated_code = intermediateGenerator.getCode()
         print("CÓDIGO INTERMEDIO")
         print(generated_code.printable())
-        mipsTranslator = MIPSTranslator(generated_code.printable())
+        mipsTranslator = MIPSTranslator(generated_code)
         mipsTranslator.translate()
-        print("CÓDIGO MIPS")
-        print(mipsTranslator.mipsCode)
-        print("Código compilado exitosamente")
+        mipsCode = mipsTranslator.getCode()
+        print("CÓDIGO MIPS\n")
+        for instruction in mipsCode:
+            print(instruction)
+        print("\nCódigo compilado exitosamente")
     else:
         print(semanticVisitor.getOutput())
         print("Se encontraron errores durante el análisis. Compilación falló.")
