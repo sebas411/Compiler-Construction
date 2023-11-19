@@ -15,6 +15,11 @@ class ClassObj(object):
     def is_inherited_method(self, method_name):
         return method_name in self.inherited_methods
     
+    def add_method(self, name, method):
+        if name in self.inherited_methods:
+            self.inherited_methods.discard(name)
+        self.methods[name] = method
+    
     def add_attribute(self, name, type):
         new_att = Attribute(type)
         if type == "Int":

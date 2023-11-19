@@ -6,3 +6,5 @@ tree.png
 .antlr
 checklist.txt
 testing.yapl
+output.S
+intermediary.txt

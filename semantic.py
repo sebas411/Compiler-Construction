@@ -17,25 +17,25 @@ class TypeCheckingVisitor(YAPLVisitor):
 
         # Agregar las clases especiales
         self.classes['Object'] = ClassObj('Object')
-        self.classes['Object'].methods['abort'] = Method('Object', {})
-        self.classes['Object'].methods['type_name'] = Method('String', {})
-        self.classes['Object'].methods['copy'] = Method('SELF_TYPE', {})
+        self.classes['Object'].add_method('abort', Method('Object', {}))
+        self.classes['Object'].add_method('type_name', Method('String', {}))
+        self.classes['Object'].add_method('copy', Method('SELF_TYPE', {}))
         
         self.classes['IO'] = ClassObj('IO')
         self.classes['IO'].inherit(self.classes['Object'])
-        self.classes['IO'].methods['in_int'] = Method('Int', {})
-        self.classes['IO'].methods['in_string'] = Method('String', {})
-        self.classes['IO'].methods['out_int'] = Method('SELF_TYPE', {'x': 'Int'})
-        self.classes['IO'].methods['out_string'] = Method('SELF_TYPE', {'x': 'String'})
+        self.classes['IO'].add_method('in_int', Method('Int', {}))
+        self.classes['IO'].add_method('in_string', Method('String', {}))
+        self.classes['IO'].add_method('out_int', Method('SELF_TYPE', {'x': 'Int'}))
+        self.classes['IO'].add_method('out_string', Method('SELF_TYPE', {'x': 'String'}))
 
         self.classes['Int'] = ClassObj('Int')
         self.classes['Int'].inherit(self.classes['Object'])
 
         self.classes['String'] = ClassObj('String')
         self.classes['String'].inherit(self.classes['Object'])
-        self.classes['String'].methods['length'] = Method('Int', {})
-        self.classes['String'].methods['concat'] = Method('String', {'s': 'String'})
-        self.classes['String'].methods['substr'] = Method('String', {'i': 'Int', 'l': 'Int'})
+        self.classes['String'].add_method('length', Method('Int', {}))
+        self.classes['String'].add_method('concat', Method('String', {'s': 'String'}))
+        self.classes['String'].add_method('substr', Method('String', {'i': 'Int', 'l': 'Int'}))
 
         self.classes['Bool'] = ClassObj('Bool')
         self.classes['Bool'].inherit(self.classes['Object'])
@@ -113,7 +113,7 @@ class TypeCheckingVisitor(YAPLVisitor):
                     return
                 self.classes[class_name].inherited_methods.discard(method_name)
 
-            self.classes[class_name].methods[method_name] = Method(method_type, params)
+            self.classes[class_name].add_method(method_name, Method(method_type, params))
         
         else: # attribute
             attribute_name = feature.id_().getText()

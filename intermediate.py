@@ -11,13 +11,14 @@ class IntermediateCodeVisitor(YAPLVisitor):
         self.current_method = None
         self.classes = {}
         self.typechecker = typechecker
+        self.inheritance_info = self.typechecker.inheritance_info
         self.active_lets = []
         self.last_let = 0
         t1 = self.new_temp()
         self.code.addInstruction("new", "Main", result=t1)
-        self.code.addInstruction("call", "Main.Init", 0, result=t1)
+        self.code.addInstruction("call", "Main_Init", 0, result=t1)
         t2 = self.new_temp()
-        self.code.addInstruction("call", "Main.main", "0", result=t2)
+        self.code.addInstruction("call", "Main_main", "0", result=t2)
 
     def getExtData(self):
         data = {
@@ -52,7 +53,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 methods.append(feature)
             else:
                 attributes.append(feature)
-        init_label = self.code.new_label(f"{self.current_class}.Init")
+        init_label = self.code.new_label(f"{self.current_class}_Init")
         self.code.set_label(init_label)
         for attribute in attributes:
             self.visitAttribute(attribute)
@@ -63,7 +64,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
 
     def visitMethod(self, ctx:YAPLParser.FeatureContext):
         self.current_method = ctx.id_().getText()
-        l = self.code.new_label(f"{self.current_class}.{self.current_method}")
+        l = self.code.new_label(f"{self.current_class}_{self.current_method}")
         self.code.set_label(l)
         res = self.genCode(ctx.expr())
         self.code.addInstruction("return", res)
@@ -163,7 +164,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
             for param in method_params:
                 self.code.addInstruction('param', param)
             result = self.new_temp()
-            self.code.addInstruction('call', f"{className}.{methodName}", len(method_params), result)
+            self.code.addInstruction('call', f"{className}_{methodName}", len(method_params), result)
 
             return result
         
@@ -173,7 +174,17 @@ class IntermediateCodeVisitor(YAPLVisitor):
             for param in method_params:
                 self.code.addInstruction('param', param)
             result = self.new_temp()
-            self.code.addInstruction('call', f"{self.current_class}.{method_name}", len(method_params), result)
+            called_class = self.current_class
+            while True:
+                if method_name in self.classes[called_class].inherited_methods:
+                    if called_class not in self.inheritance_info:
+                        called_class = self.current_class
+                        break
+                    else:
+                        called_class = self.inheritance_info[called_class]
+                else:
+                    break
+            self.code.addInstruction('call', f"{called_class}_{method_name}", len(method_params), result)
             return result
 
         # Condicionales
@@ -275,7 +286,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
         elif ctx.getChildCount() == 2 and ctx.getChild(0).getSymbol().type == YAPLParser.NEW: # new
             pointer = self.getPointer()
             self.code.addInstruction("new", ctx.TYPE_ID(0).getText(), result=pointer)
-            self.code.addInstruction("call", f"{ctx.TYPE_ID(0).getText()}.Init", 0, result=pointer)
+            self.code.addInstruction("call", f"{ctx.TYPE_ID(0).getText()}_Init", 0, result=pointer)
             return pointer
 
         return None
