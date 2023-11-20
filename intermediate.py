@@ -14,11 +14,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
         self.inheritance_info = self.typechecker.inheritance_info
         self.active_lets = []
         self.last_let = 0
-        t1 = self.new_temp()
-        self.code.addInstruction("new", "Main", result=t1)
-        self.code.addInstruction("call", "Main_Init", 0, result=t1)
-        t2 = self.new_temp()
-        self.code.addInstruction("call", "Main_main", "0", result=t2)
+        
 
     def getExtData(self):
         data = {
@@ -36,6 +32,15 @@ class IntermediateCodeVisitor(YAPLVisitor):
 
     def setTable(self, table):
         self.classes = table
+        for clas in list(self.classes.keys()):
+            if clas in ['Object', 'IO', 'Int', 'String', 'Bool']:
+                continue
+            self.code.addInstruction("reserve", clas, self.classes[clas].size)
+        # t1 = self.new_temp()
+        # self.code.addInstruction("new", "Main", result=t1)
+        # self.code.addInstruction("call", "Main_Init", 0, result=t1)
+        # t2 = self.new_temp()
+        # self.code.addInstruction("call", "Main_main", "0", result=t2)
 
     def new_temp(self):
         return self.temp_manager.get_new_temporal()
@@ -96,9 +101,12 @@ class IntermediateCodeVisitor(YAPLVisitor):
 
         # Asignaciones
         if ctx.getChildCount() == 3 and ctx.getChild(1).getText() == "<-":
-            attribute = self.classes[self.current_class].get_attribute(self.current_method, self.active_lets, ctx.id_()[0].getText())
+            attribute, att_scope = self.classes[self.current_class].get_attribute(self.current_method, self.active_lets, ctx.id_()[0].getText())
             offset = attribute.offset
-            left_var = f"SP[{offset}]"
+            if att_scope == "global":
+                left_var = f"IP[{offset}]"
+            else:
+                left_var = f"SP[{offset}]"
             right_val = self.genCode(ctx.expr(0))
             self.code.addInstruction('=', right_val, result=left_var)
             self.free_temp(right_val)
@@ -134,9 +142,12 @@ class IntermediateCodeVisitor(YAPLVisitor):
         elif ctx.getChildCount() == 1:
             child = ctx.getChild(0)
             if isinstance(child, YAPLParser.IdContext):
-                attribute = self.classes[self.current_class].get_attribute(self.current_method, self.active_lets, ctx.getText())
+                attribute, att_scope = self.classes[self.current_class].get_attribute(self.current_method, self.active_lets, ctx.getText())
                 offset = attribute.offset
-                left_var = f"SP[{offset}]"
+                if att_scope == "global":
+                    left_var = f"IP[{offset}]"
+                else:
+                    left_var = f"SP[{offset}]"
                 return left_var
             elif child.getSymbol().type == YAPLParser.INTEGER:
                 return child.getText()
@@ -161,6 +172,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 className = self.typechecker.get_expr_type(ctx.expr(0), extData)
                 methodName = ctx.getChild(2).getText()
             method_params = [self.genCode(expr) for expr in ctx.expr()[1:]]
+            self.code.addInstruction('savera')
             for param in method_params:
                 self.code.addInstruction('param', param)
             result = self.new_temp()
@@ -171,6 +183,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
         elif ctx.getChildCount() >= 3 and ctx.getChild(1).getText() == "(":
             method_name = ctx.getChild(0).getText()
             method_params = [self.genCode(expr) for expr in ctx.expr()]
+            self.code.addInstruction('savera')
             for param in method_params:
                 self.code.addInstruction('param', param)
             result = self.new_temp()

@@ -43,10 +43,10 @@ class ClassObj(object):
     
     def get_attribute(self, current_method, active_lets, attribute_name):
         if attribute_name in self.attributes:
-            return self.attributes[attribute_name]
+            return self.attributes[attribute_name], "global"
         if current_method:
-            return self.methods[current_method].get_attribute(attribute_name, active_lets)
-        return "Error"
+            return self.methods[current_method].get_attribute(attribute_name, active_lets), "local"
+        return "Error", ""
     
     def has_attribute(self, current_method, active_lets, attribute_name):
         return attribute_name in self.attributes or (current_method and self.methods[current_method].has_attribute(attribute_name, active_lets))
@@ -135,6 +135,11 @@ class IntermediateInstruction():
         self.arg1 = arg1
         self.arg2 = arg2
         self.result = result
+    
+    def __str__(self) -> str:
+        return f"{self.op}"
+    def __repr__(self) -> str:
+        return str(self)
 
 
 class Label():
@@ -202,6 +207,10 @@ class IntermediateCode():
                 pcode+=f"{instruction.result} = lnot {instruction.arg1}"
             elif instruction.op == "minus":
                 pcode+=f"{instruction.result} = minus {instruction.arg1}"
+            elif instruction.op == "savera":
+                pcode+="save $ra"
+            elif instruction.op == "reserve":
+                pcode+=f"reserve {instruction.arg1} {instruction.arg2}"
             pcode+="\n"
             c += 1
         return pcode

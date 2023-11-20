@@ -1,8 +1,8 @@
 
 
 class Main inherits IO {
-   m: Int;
-   n: Int;
+   a: Int;
+   b: Int;
 
    ackermann(m: Int, n: Int) : Int {
       if (m=0) then
@@ -19,15 +19,15 @@ class Main inherits IO {
    main(): SELF_TYPE {
       {
          out_string("Por favor ingrese m: ");
-         m <- in_int();
+         a <- in_int();
          out_string("Por favor ingrese n: ");
-         n <- in_int();
+         b <- in_int();
          out_string("La función de ackerman para (");
-         out_int(m);
+         out_int(a);
          out_string(",");
-         out_int(n);
+         out_int(b);
          out_string(") es: ");
-         out_int(ackermann(m,n));
+         out_int(ackermann(a,b));
          out_string("\n");
       }
    };
