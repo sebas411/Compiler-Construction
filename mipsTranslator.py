@@ -67,6 +67,21 @@ class MIPSTranslator:
                 self.mipsCode.append("    syscall")
             c+=1
 
+            if instruction.op == "-":
+                temp_dest = self.getTemp()
+                op1 = self.genVarCode(instruction.arg1, "$s0")
+                op2 = self.genVarCode(instruction.arg2, "$s1")
+                self.mipsCode.append(f"    sub {temp_dest}, {op1}, {op2}")
+                self.genStoreCode(instruction.result, temp_dest)
+
+            if instruction.op == "eq":
+                temp_dest = self.getTemp()
+                op1 = self.genVarCode(instruction.arg1, "$s0")
+                op2 = self.genVarCode(instruction.arg2, "$s1")
+                self.mipsCode.append(f"    seq {temp_dest}, {op1}, {op2}")
+                self.genStoreCode(instruction.result, temp_dest)
+
+
 
     def genStoreCode(self, var, reg):
         st_name = ""
