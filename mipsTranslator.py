@@ -12,6 +12,7 @@ class MIPSTranslator:
         self.availableTempRegs = [f"$t{i}" for i in range(7)]
         self.data = []
         self.maxstr = 0
+        self.saved_temps = 0
 
     def translate(self):
         instructions = self.intermediateCode.code
@@ -100,12 +101,26 @@ class MIPSTranslator:
             if instruction.op == "savera":
                 self.mipsCode.append("    sub $sp, $sp, 4")
                 self.mipsCode.append("    sw		$ra, 0($sp)")
+            
+            if instruction.op == "savetemporal":
+                op1 = self.genVarCode(instruction.arg1, "$s0")
+                self.mipsCode.append("    sub $sp, $sp, 4")
+                self.mipsCode.append(f"    sw		$s0, 0($sp)")
+                self.saved_temps += 1
+
+            if instruction.op == "restoretemporal":
+                self.saved_temps = 0
+                self.mipsCode.append(f"    lw		$s0, 0($sp)")
+                self.mipsCode.append("    addi $sp, $sp, 4")
+                self.genStoreCode(instruction.arg1, "$s0")
+
 
             if instruction.op == "paramnum":
+                self.active_param_num = instruction.arg1
                 self.mipsCode.append(f"    sub $sp, $sp, {instruction.arg1*4}")
 
             if instruction.op == "param":
-                op1 = self.genVarCode(instruction.arg1, "$s0")
+                op1 = self.genVarCode(instruction.arg1, "$s0", extra_temps=(self.saved_temps+1+self.active_param_num))
                 self.mipsCode.append(f"    sw		{op1}, 0($sp)")
                 self.mipsCode.append("    addi $sp, $sp, 4")
 
@@ -129,6 +144,7 @@ class MIPSTranslator:
                 self.mipsCode.append("    jr $ra")
 
 
+
             c+=1
         
         self.mipsCode.append(".data")
@@ -148,11 +164,14 @@ class MIPSTranslator:
             return False
         self.mipsCode.append(f"    sw {reg}, {st_name}")
     
-    def genVarCode(self, var, reg):
+    def genVarCode(self, var, reg, extra_temps=None):
+        extra_stack_space = 0
+        if extra_temps:
+            extra_stack_space = extra_temps * 4
         if var[0] == "T":
             self.mipsCode.append(f"    lw {reg}, -{int(var[1])*4}($gp)")
         elif var[:3] == "SP[":
-            self.mipsCode.append(f"    lw {reg}, {int(var[3])}($sp)")
+            self.mipsCode.append(f"    lw {reg}, {int(var[3])+extra_stack_space}($sp)")
         elif var[:3] == "IP[":
             self.mipsCode.append(f"    lw {reg}, {int(var[3])}($s7)")
         elif is_num(var):

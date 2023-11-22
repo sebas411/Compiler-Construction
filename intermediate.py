@@ -68,6 +68,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
         self.current_class = None
 
     def visitMethod(self, ctx:YAPLParser.FeatureContext):
+        self.temp_manager.reset_temps()
         self.current_method = ctx.id_().getText()
         l = self.code.new_label(f"{self.current_class}_{self.current_method}")
         self.code.set_label(l)
@@ -172,6 +173,9 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 className = self.typechecker.get_expr_type(ctx.expr(0), extData)
                 methodName = ctx.getChild(2).getText()
             method_params = [self.genCode(expr) for expr in ctx.expr()[1:]]
+            pre_call_temporals = self.temp_manager.get_used_temporals()
+            for temporal in pre_call_temporals:
+                self.code.addInstruction('savetemporal', temporal)
             self.code.addInstruction('savera')
             param_num = len(method_params)
             self.code.addInstruction('paramnum', param_num)
@@ -179,12 +183,17 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 self.code.addInstruction('param', param)
             result = self.new_temp()
             self.code.addInstruction('call', f"{className}_{methodName}", param_num, result)
+            for temporal in pre_call_temporals[::-1]:
+                self.code.addInstruction('restoretemporal', temporal)
 
             return result
         
         elif ctx.getChildCount() >= 3 and ctx.getChild(1).getText() == "(":
             method_name = ctx.getChild(0).getText()
             method_params = [self.genCode(expr) for expr in ctx.expr()]
+            pre_call_temporals = self.temp_manager.get_used_temporals()
+            for temporal in pre_call_temporals:
+                self.code.addInstruction('savetemporal', temporal)
             self.code.addInstruction('savera')
             param_num = len(method_params)
             self.code.addInstruction('paramnum', param_num)
@@ -202,6 +211,8 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 else:
                     break
             self.code.addInstruction('call', f"{called_class}_{method_name}", param_num, result)
+            for temporal in pre_call_temporals[::-1]:
+                self.code.addInstruction('restoretemporal', temporal)
             return result
 
         # Condicionales

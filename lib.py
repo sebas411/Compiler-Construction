@@ -213,6 +213,10 @@ class IntermediateCode():
                 pcode+=f"reserve {instruction.arg1} {instruction.arg2}"
             elif instruction.op == "paramnum":
                 pcode+=f"param_num {instruction.arg1}"
+            elif instruction.op == "savetemporal":
+                pcode+=f"save_temporal {instruction.arg1}"
+            elif instruction.op == "restoretemporal":
+                pcode+=f"restore_temporal {instruction.arg1}"
             pcode+="\n"
             c += 1
         return pcode
@@ -263,6 +267,13 @@ class TemporalManager:
             self.temporals.append(temporal)
         return temporal
     
+    def get_used_temporals(self):
+        used_temporals = []
+        for temporal in self.temporals:
+            if temporal not in self.available_temporals:
+                used_temporals.append(temporal)
+        return used_temporals
+    
     def get_pointer(self):
         self.maxPointer += 1
         pointer = f"P{self.maxPointer}"
@@ -272,3 +283,8 @@ class TemporalManager:
     def free_temporal(self, temporal):
         if temporal not in self.temporals: return
         self.available_temporals.append(temporal)
+
+    def reset_temps(self):
+        self.maxTemp = 0
+        self.available_temporals = []
+        self.temporals = []
