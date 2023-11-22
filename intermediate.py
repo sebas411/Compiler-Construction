@@ -72,10 +72,10 @@ class IntermediateCodeVisitor(YAPLVisitor):
         l = self.code.new_label(f"{self.current_class}_{self.current_method}")
         self.code.set_label(l)
         res = self.genCode(ctx.expr())
-        self.code.addInstruction("return", res)
-        self.free_temp(res)
         if self.current_class == "Main" and self.current_method == "main":
             self.code.addInstruction("HALT")
+        self.code.addInstruction("return", res)
+        self.free_temp(res)
         self.current_method = None
 
     def visitAttribute(self, ctx:YAPLParser.FeatureContext):
@@ -173,10 +173,12 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 methodName = ctx.getChild(2).getText()
             method_params = [self.genCode(expr) for expr in ctx.expr()[1:]]
             self.code.addInstruction('savera')
+            param_num = len(method_params)
+            self.code.addInstruction('paramnum', param_num)
             for param in method_params:
                 self.code.addInstruction('param', param)
             result = self.new_temp()
-            self.code.addInstruction('call', f"{className}_{methodName}", len(method_params), result)
+            self.code.addInstruction('call', f"{className}_{methodName}", param_num, result)
 
             return result
         
@@ -184,6 +186,8 @@ class IntermediateCodeVisitor(YAPLVisitor):
             method_name = ctx.getChild(0).getText()
             method_params = [self.genCode(expr) for expr in ctx.expr()]
             self.code.addInstruction('savera')
+            param_num = len(method_params)
+            self.code.addInstruction('paramnum', param_num)
             for param in method_params:
                 self.code.addInstruction('param', param)
             result = self.new_temp()
@@ -197,7 +201,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
                         called_class = self.inheritance_info[called_class]
                 else:
                     break
-            self.code.addInstruction('call', f"{called_class}_{method_name}", len(method_params), result)
+            self.code.addInstruction('call', f"{called_class}_{method_name}", param_num, result)
             return result
 
         # Condicionales

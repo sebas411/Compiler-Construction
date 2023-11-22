@@ -211,6 +211,8 @@ class IntermediateCode():
                 pcode+="save $ra"
             elif instruction.op == "reserve":
                 pcode+=f"reserve {instruction.arg1} {instruction.arg2}"
+            elif instruction.op == "paramnum":
+                pcode+=f"param_num {instruction.arg1}"
             pcode+="\n"
             c += 1
         return pcode

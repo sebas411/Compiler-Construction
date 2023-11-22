@@ -101,12 +101,17 @@ class MIPSTranslator:
                 self.mipsCode.append("    sub $sp, $sp, 4")
                 self.mipsCode.append("    sw		$ra, 0($sp)")
 
+            if instruction.op == "paramnum":
+                self.mipsCode.append(f"    sub $sp, $sp, {instruction.arg1*4}")
+
             if instruction.op == "param":
                 op1 = self.genVarCode(instruction.arg1, "$s0")
-                self.mipsCode.append("    sub $sp, $sp, 4")
                 self.mipsCode.append(f"    sw		{op1}, 0($sp)")
+                self.mipsCode.append("    addi $sp, $sp, 4")
 
             if instruction.op == "call":
+                if int(instruction.arg2) > 0:
+                    self.mipsCode.append(f"    sub $sp, $sp, {int(instruction.arg2)*4}")
                 self.mipsCode.append(f"    jal {instruction.arg1}")
                 if int(instruction.arg2) > 0:
                     self.mipsCode.append(f"    addi $sp, $sp, {int(instruction.arg2)*4}")
@@ -120,7 +125,7 @@ class MIPSTranslator:
             if instruction.op == "return":
                 if instruction.arg1:
                     op1 = self.genVarCode(instruction.arg1, "$s0")
-                    self.mipsCode.append(f"    move {op1}, $v0")
+                    self.mipsCode.append(f"    move $v0, {op1}")
                 self.mipsCode.append("    jr $ra")
 
 
@@ -134,22 +139,22 @@ class MIPSTranslator:
     def genStoreCode(self, var, reg):
         st_name = ""
         if var[0] == "T":
-            st_name = f"{int(var[1])*4}($gp)"
+            st_name = f"-{int(var[1])*4}($gp)"
         elif var[:3] == "SP[":
-                st_name = f"{int(var[3])*4}($sp)"
+                st_name = f"{int(var[3])}($sp)"
         elif var[:3] == "IP[":
-                st_name = f"{int(var[3])*4}($s7)"
+                st_name = f"{int(var[3])}($s7)"
         else:
             return False
         self.mipsCode.append(f"    sw {reg}, {st_name}")
     
     def genVarCode(self, var, reg):
         if var[0] == "T":
-            self.mipsCode.append(f"    lw {reg}, {int(var[1])*4}($gp)")
+            self.mipsCode.append(f"    lw {reg}, -{int(var[1])*4}($gp)")
         elif var[:3] == "SP[":
-            self.mipsCode.append(f"    lw {reg}, {int(var[3])*4}($sp)")
+            self.mipsCode.append(f"    lw {reg}, {int(var[3])}($sp)")
         elif var[:3] == "IP[":
-            self.mipsCode.append(f"    lw {reg}, {int(var[3])*4}($s7)")
+            self.mipsCode.append(f"    lw {reg}, {int(var[3])}($s7)")
         elif is_num(var):
             self.mipsCode.append(f"    li {reg}, {var}")
         elif var[0] == '"':
