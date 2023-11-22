@@ -217,6 +217,10 @@ class IntermediateCode():
                 pcode+=f"save_temporal {instruction.arg1}"
             elif instruction.op == "restoretemporal":
                 pcode+=f"restore_temporal {instruction.arg1}"
+            elif instruction.op == "loadIP":
+                pcode+=f"loadIP {instruction.arg1}"
+            elif instruction.op == "restoreIP":
+                pcode+=f"restoreIP"
             pcode+="\n"
             c += 1
         return pcode

@@ -36,6 +36,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
             if clas in ['Object', 'IO', 'Int', 'String', 'Bool']:
                 continue
             self.code.addInstruction("reserve", clas, self.classes[clas].size)
+        self.code.addInstruction("reserve", "Object", 0)
         # t1 = self.new_temp()
         # self.code.addInstruction("new", "Main", result=t1)
         # self.code.addInstruction("call", "Main_Init", 0, result=t1)
@@ -80,16 +81,19 @@ class IntermediateCodeVisitor(YAPLVisitor):
         self.current_method = None
 
     def visitAttribute(self, ctx:YAPLParser.FeatureContext):
-        att_name = f"{self.current_class}.{ctx.getChild(0).getText()}"
+        attribute, _ = self.classes[self.current_class].get_attribute(None, None, ctx.getChild(0).getText())
+        offset = attribute.offset
+        left_var = f"IP[{offset}]"
+        #att_name = f"{self.current_class}.{ctx.getChild(0).getText()}"
         if ctx.expr():
             code = self.genCode(ctx.expr())
-            self.code.addInstruction("=", code, result=att_name)
+            self.code.addInstruction("=", code, result=left_var)
         else:
             att_type = self.classes[self.current_class].get_attribute_type(self.current_method, self.active_lets, ctx.getChild(0).getText())
             if att_type in ["Int", "Bool"]:
-                self.code.addInstruction("=", "0", result=att_name)
+                self.code.addInstruction("=", "0", result=left_var)
             elif att_type == "String":
-                self.code.addInstruction("=", '""', result=att_name)
+                self.code.addInstruction("=", '""', result=left_var)
 
 
     def visitChildren(self, node):
@@ -165,6 +169,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
         # LLamadas de función y método
         elif ctx.getChildCount() >= 5 and (ctx.getChild(1).getText() == "." or ctx.getChild(3).getText() == "."):
             instance = self.genCode(ctx.getChild(0))
+            self.code.addInstruction("loadIP", instance)
             if ctx.getChild(1).getText() == "@":
                 className = ctx.getChild(2).getText()
                 methodName = ctx.getChild(4).getText()
@@ -182,10 +187,22 @@ class IntermediateCodeVisitor(YAPLVisitor):
             for param in method_params:
                 self.code.addInstruction('param', param)
             result = self.new_temp()
-            self.code.addInstruction('call', f"{className}_{methodName}", param_num, result)
+            called_class = className
+            while True:
+                if methodName in self.classes[called_class].inherited_methods:
+                    if called_class not in self.inheritance_info:
+                        called_class = className
+                        break
+                    else:
+                        called_class = self.inheritance_info[called_class]
+                else:
+                    break
+            if methodName == "abort": called_class = "Object"
+            self.code.addInstruction('call', f"{called_class}_{methodName}", param_num, result)
             for temporal in pre_call_temporals[::-1]:
                 self.code.addInstruction('restoretemporal', temporal)
-
+            self.code.addInstruction("restoreIP")
+            self.free_temp(instance)
             return result
         
         elif ctx.getChildCount() >= 3 and ctx.getChild(1).getText() == "(":
@@ -210,6 +227,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
                         called_class = self.inheritance_info[called_class]
                 else:
                     break
+            if method_name == "abort": called_class = "Object"
             self.code.addInstruction('call', f"{called_class}_{method_name}", param_num, result)
             for temporal in pre_call_temporals[::-1]:
                 self.code.addInstruction('restoretemporal', temporal)
@@ -312,9 +330,9 @@ class IntermediateCodeVisitor(YAPLVisitor):
             return result
 
         elif ctx.getChildCount() == 2 and ctx.getChild(0).getSymbol().type == YAPLParser.NEW: # new
-            pointer = self.getPointer()
+            pointer = self.new_temp()
             self.code.addInstruction("new", ctx.TYPE_ID(0).getText(), result=pointer)
-            self.code.addInstruction("call", f"{ctx.TYPE_ID(0).getText()}_Init", 0, result=pointer)
+            self.code.addInstruction("call", f"{ctx.TYPE_ID(0).getText()}_Init", 0, result="T0")
             return pointer
 
         return None

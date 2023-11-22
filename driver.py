@@ -69,16 +69,16 @@ def main(argv):
         intermediateGenerator.setTable(table)
         intermediateGenerator.visit(tree)
         generated_code = intermediateGenerator.getCode()
-        print("CÓDIGO INTERMEDIO")
-        print(generated_code.printable())
+        # print("CÓDIGO INTERMEDIO")
+        # print(generated_code.printable())
         with open("intermediary.txt", "w") as inter_file:
             inter_file.write(generated_code.printable())
         mipsTranslator = MIPSTranslator(generated_code)
         mipsTranslator.translate()
         mipsCode = mipsTranslator.getCode()
-        print("CÓDIGO MIPS\n")
-        for instruction in mipsCode:
-            print(instruction)
+        # print("CÓDIGO MIPS\n")
+        # for instruction in mipsCode:
+        #     print(instruction)
         with open("output.S", "w") as out_file:
             for instruction in mipsCode:
                 out_file.write(instruction + "\n")
