@@ -9,7 +9,9 @@ class ClassObj(object):
     
     def inherit(self, o_class):
         self.methods = o_class.methods.copy()
-        self.attributes = o_class.attributes.copy()
+        atts = o_class.attributes.copy()
+        for att in atts:
+            self.add_attribute(att, atts[att].type)
         self.inherited_methods = set(o_class.methods.keys())
 
     def is_inherited_method(self, method_name):
@@ -210,7 +212,9 @@ class IntermediateCode():
             elif instruction.op == "savera":
                 pcode+="save $ra"
             elif instruction.op == "reserve":
-                pcode+=f"reserve {instruction.arg1} {instruction.arg2}"
+                pcode+=f"reserve {instruction.arg1}"
+            elif instruction.op == "setsize":
+                pcode+=f"setsize {instruction.arg1} {instruction.arg2}"
             elif instruction.op == "paramnum":
                 pcode+=f"param_num {instruction.arg1}"
             elif instruction.op == "savetemporal":

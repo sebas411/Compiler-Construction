@@ -35,8 +35,8 @@ class IntermediateCodeVisitor(YAPLVisitor):
         for clas in list(self.classes.keys()):
             if clas in ['Object', 'IO', 'Int', 'String', 'Bool']:
                 continue
-            self.code.addInstruction("reserve", clas, self.classes[clas].size)
-        self.code.addInstruction("reserve", "Object", 0)
+            self.code.addInstruction("setsize", clas, self.classes[clas].size)
+        self.code.addInstruction("setsize", "Object", 0)
         # t1 = self.new_temp()
         # self.code.addInstruction("new", "Main", result=t1)
         # self.code.addInstruction("call", "Main_Init", 0, result=t1)
@@ -63,6 +63,7 @@ class IntermediateCodeVisitor(YAPLVisitor):
         self.code.set_label(init_label)
         for attribute in attributes:
             self.visitAttribute(attribute)
+        self.code.addInstruction("reserve", self.classes[self.current_class].size)
         self.code.addInstruction("return")
         for method in methods:
             self.visitMethod(method)
@@ -182,11 +183,6 @@ class IntermediateCodeVisitor(YAPLVisitor):
             for temporal in pre_call_temporals:
                 self.code.addInstruction('savetemporal', temporal)
             self.code.addInstruction('savera')
-            param_num = len(method_params)
-            self.code.addInstruction('paramnum', param_num)
-            for param in method_params:
-                self.code.addInstruction('param', param)
-            result = self.new_temp()
             called_class = className
             while True:
                 if methodName in self.classes[called_class].inherited_methods:
@@ -198,6 +194,22 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 else:
                     break
             if methodName == "abort": called_class = "Object"
+            method_size = self.classes[called_class].methods[methodName].max_off
+            param_num = len(method_params)
+            empty_params = 0
+            if method_size > param_num*4:
+                empty_params = (method_size // 4) - param_num
+                param_num = method_size // 4
+            self.code.addInstruction('paramnum', param_num)
+            for param in method_params:
+                self.code.addInstruction('param', param)
+            for i in range(empty_params):
+                self.code.addInstruction('param', "0")
+
+            # if method_size > param_num*4:
+            #     self.code.addInstruction('param', param)
+
+            result = self.new_temp()
             self.code.addInstruction('call', f"{called_class}_{methodName}", param_num, result)
             for temporal in pre_call_temporals[::-1]:
                 self.code.addInstruction('restoretemporal', temporal)
@@ -212,11 +224,6 @@ class IntermediateCodeVisitor(YAPLVisitor):
             for temporal in pre_call_temporals:
                 self.code.addInstruction('savetemporal', temporal)
             self.code.addInstruction('savera')
-            param_num = len(method_params)
-            self.code.addInstruction('paramnum', param_num)
-            for param in method_params:
-                self.code.addInstruction('param', param)
-            result = self.new_temp()
             called_class = self.current_class
             while True:
                 if method_name in self.classes[called_class].inherited_methods:
@@ -228,6 +235,18 @@ class IntermediateCodeVisitor(YAPLVisitor):
                 else:
                     break
             if method_name == "abort": called_class = "Object"
+            method_size = self.classes[called_class].methods[method_name].max_off
+            param_num = len(method_params)
+            empty_params = 0
+            if method_size > param_num*4:
+                empty_params = (method_size // 4) - param_num
+                param_num = method_size // 4
+            self.code.addInstruction('paramnum', param_num)
+            for param in method_params:
+                self.code.addInstruction('param', param)
+            for i in range(empty_params):
+                self.code.addInstruction('param', "0")
+            result = self.new_temp()
             self.code.addInstruction('call', f"{called_class}_{method_name}", param_num, result)
             for temporal in pre_call_temporals[::-1]:
                 self.code.addInstruction('restoretemporal', temporal)
@@ -307,24 +326,25 @@ class IntermediateCodeVisitor(YAPLVisitor):
             att_names = []
             att_types = []
             curr_check = 1
+            self.active_lets.append(let_name)
             while True:
                 att_name = ctx.getChild(curr_check).getText()
                 att_type = ctx.getChild(curr_check + 2).getText()
                 att_names.append(att_name)
                 att_types.append(att_type)
+                attribute, _ = self.classes[self.current_class].get_attribute(self.current_method, self.active_lets, att_name)
                 if ctx.getChild(curr_check + 3).getText() == "<-":
                     assign = self.genCode(ctx.getChild(curr_check + 4))
-                    self.code.addInstruction("=", assign, result=f"{self.current_class}.{att_name}")
+                    self.code.addInstruction("=", assign, result=f"S[{attribute.offset}]")
                     curr_check += 6
                 else:
                     if att_type in ["Int", "Bool"]:
-                        self.code.addInstruction("=", "0", result=f"{self.current_class}.{att_name}")
+                        self.code.addInstruction("=", "0", result=f"S[{attribute.offset}]")
                     elif att_type == "String":
-                        self.code.addInstruction("=", '""', result=f"{self.current_class}.{att_name}")
+                        self.code.addInstruction("=", '""', result=f"S[{attribute.offset}]")
                     curr_check += 4
                 if ctx.getChild(curr_check - 1).getText() != ",":
                     break
-            self.active_lets.append(let_name)
             result = self.genCode(ctx.expr()[-1])
             self.active_lets.pop()
             return result
@@ -332,7 +352,17 @@ class IntermediateCodeVisitor(YAPLVisitor):
         elif ctx.getChildCount() == 2 and ctx.getChild(0).getSymbol().type == YAPLParser.NEW: # new
             pointer = self.new_temp()
             self.code.addInstruction("new", ctx.TYPE_ID(0).getText(), result=pointer)
+
+            self.code.addInstruction('loadIP', pointer)
+            pre_call_temporals = self.temp_manager.get_used_temporals()
+            for temporal in pre_call_temporals:
+                self.code.addInstruction('savetemporal', temporal)
+            self.code.addInstruction('savera')
             self.code.addInstruction("call", f"{ctx.TYPE_ID(0).getText()}_Init", 0, result="T0")
+            for temporal in pre_call_temporals[::-1]:
+                self.code.addInstruction('restoretemporal', temporal)
+            self.code.addInstruction("restoreIP")
+            
             return pointer
 
         return None

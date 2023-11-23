@@ -103,7 +103,7 @@ class MIPSTranslator:
                 self.genStoreCode(instruction.result, temp_dest)
                 self.freeTemp(temp_dest)
                 
-            if instruction.op == "-":
+            elif instruction.op == "-":
                 temp_dest = self.getTemp()
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 op2 = self.genVarCode(instruction.arg2, "$s1")
@@ -111,7 +111,7 @@ class MIPSTranslator:
                 self.genStoreCode(instruction.result, temp_dest)
                 self.freeTemp(temp_dest)
             
-            if instruction.op == "/":
+            elif instruction.op == "/":
                 temp_dest = self.getTemp()
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 op2 = self.genVarCode(instruction.arg2, "$s1")
@@ -120,7 +120,7 @@ class MIPSTranslator:
                 self.genStoreCode(instruction.result, temp_dest)
                 self.freeTemp(temp_dest)
 
-            if instruction.op == "*":
+            elif instruction.op == "*":
                 temp_dest = self.getTemp()
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 op2 = self.genVarCode(instruction.arg2, "$s1")
@@ -128,7 +128,7 @@ class MIPSTranslator:
                 self.genStoreCode(instruction.result, temp_dest)
                 self.freeTemp(temp_dest)
 
-            if instruction.op == "eq":
+            elif instruction.op == "eq":
                 temp_dest = self.getTemp()
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 op2 = self.genVarCode(instruction.arg2, "$s1")
@@ -136,7 +136,14 @@ class MIPSTranslator:
                 self.genStoreCode(instruction.result, temp_dest)
                 self.freeTemp(temp_dest)
 
-            if instruction.op == "<":
+            elif instruction.op == "lnot" or instruction.op == "not":
+                temp_dest = self.getTemp()
+                op1 = self.genVarCode(instruction.arg1, "$s0")
+                self.mipsCode.append(f"    sle {temp_dest}, {op1}, $0")
+                self.genStoreCode(instruction.result, temp_dest)
+                self.freeTemp(temp_dest)
+
+            elif instruction.op == "<":
                 temp_dest = self.getTemp()
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 op2 = self.genVarCode(instruction.arg2, "$s1")
@@ -144,7 +151,7 @@ class MIPSTranslator:
                 self.genStoreCode(instruction.result, temp_dest)
                 self.freeTemp(temp_dest)
 
-            if instruction.op == "<=":
+            elif instruction.op == "<=":
                 temp_dest = self.getTemp()
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 op2 = self.genVarCode(instruction.arg2, "$s1")
@@ -152,52 +159,52 @@ class MIPSTranslator:
                 self.genStoreCode(instruction.result, temp_dest)
                 self.freeTemp(temp_dest)
 
-            if instruction.op == "=":
+            elif instruction.op == "=":
                 if len(instruction.result.split(".")) > 1:
                     c += 1
                     continue
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 self.genStoreCode(instruction.result, op1)
             
-            if instruction.op == "HALT":
+            elif instruction.op == "HALT":
                 self.mipsCode.append("    li		$v0, 10")
                 self.mipsCode.append("    syscall")
 
-            if instruction.op == "ifFalse":
+            elif instruction.op == "ifFalse":
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 self.mipsCode.append(f"    slt $s1, $0, $s0")
                 self.mipsCode.append(f"    beq $s1, $0, {instruction.result}")
 
-            if instruction.op == "goto":
+            elif instruction.op == "goto":
                 self.mipsCode.append(f"    j {instruction.result}")
 
-            if instruction.op == "savera":
+            elif instruction.op == "savera":
                 self.mipsCode.append("    sub $sp, $sp, 4")
                 self.mipsCode.append("    sw		$ra, 0($sp)")
             
-            if instruction.op == "savetemporal":
+            elif instruction.op == "savetemporal":
                 op1 = self.genVarCode(instruction.arg1, "$s0")
                 self.mipsCode.append("    sub $sp, $sp, 4")
                 self.mipsCode.append(f"    sw		$s0, 0($sp)")
                 self.saved_temps += 1
 
-            if instruction.op == "restoretemporal":
+            elif instruction.op == "restoretemporal":
                 self.saved_temps = 0
                 self.mipsCode.append(f"    lw		$s0, 0($sp)")
                 self.mipsCode.append("    addi $sp, $sp, 4")
                 self.genStoreCode(instruction.arg1, "$s0")
 
 
-            if instruction.op == "paramnum":
+            elif instruction.op == "paramnum":
                 self.active_param_num = instruction.arg1
                 self.mipsCode.append(f"    sub $sp, $sp, {instruction.arg1*4}")
 
-            if instruction.op == "param":
+            elif instruction.op == "param":
                 op1 = self.genVarCode(instruction.arg1, "$s0", extra_temps=(self.saved_temps+1+self.active_param_num))
                 self.mipsCode.append(f"    sw		{op1}, 0($sp)")
                 self.mipsCode.append("    addi $sp, $sp, 4")
 
-            if instruction.op == "call":
+            elif instruction.op == "call":
                 if int(instruction.arg2) > 0:
                     self.mipsCode.append(f"    sub $sp, $sp, {int(instruction.arg2)*4}")
                 if self.loadIP:
@@ -209,31 +216,35 @@ class MIPSTranslator:
                 self.mipsCode.append("    addi $sp, $sp, 4")
                 self.genStoreCode(instruction.result, "$v0")
 
-            if instruction.op == "loadIP":
+            elif instruction.op == "loadIP":
                 self.loadIP = instruction.arg1
                 self.mipsCode.append("    sub $sp, $sp, 4")
                 self.mipsCode.append("    sw		$s7, 0($sp)")
 
-            if instruction.op == "restoreIP":
+            elif instruction.op == "restoreIP":
                 self.mipsCode.append("    lw $s7, 0($sp)")
                 self.mipsCode.append("    addi $sp, $sp, 4")
                 self.loadIP = None
 
-            if instruction.op == "new":
-                size = self.type_sizes[instruction.arg1]
+            elif instruction.op == "new":
                 self.mipsCode.append("    add $s0, $gp, $s6")
-                self.mipsCode.append(f"    addi $s6, $s6, {size}")
                 self.genStoreCode(instruction.result, "$s0")
 
-            if instruction.op == "reserve":
+            elif instruction.op == "setsize":
                 self.type_sizes[instruction.arg1] = int(instruction.arg2)
+
+            elif instruction.op == "reserve":
+                if int(instruction.arg1) > 0:
+                    self.mipsCode.append(f"    addi $s6, $s6, {instruction.arg1}")
             
-            if instruction.op == "return":
+            elif instruction.op == "return":
                 if instruction.arg1:
                     op1 = self.genVarCode(instruction.arg1, "$s0")
                     self.mipsCode.append(f"    move $v0, {op1}")
                 self.mipsCode.append("    jr $ra")
 
+            else:
+                print(instruction.op, "unhandled")
 
 
             c+=1
@@ -275,6 +286,10 @@ class MIPSTranslator:
             self.maxstr += 1
             self.data.append(f"str{self.maxstr}: .asciiz {var}")
             self.mipsCode.append(f"    la {reg}, str{self.maxstr}")
+        elif var == "IP":
+            self.mipsCode.append(f"    move {reg}, $s7")
+        else:
+            print("unhandled")
         if reg:
             return reg
         return var
